@@ -37,8 +37,11 @@
 
     <!-- Navegação -->
     <nav class="max-w-6xl mx-auto px-6 mb-10 border-b border-pink-200">
-        <div class="flex gap-8 justify-center">
-            <button onclick="switchTab('membros')" id="btn-membros" class="pb-3 text-lg font-semibold tab-active transition-all flex items-center gap-2">
+        <div class="flex gap-4 md:gap-8 justify-center flex-wrap">
+            <button onclick="switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-lg font-semibold tab-active transition-all flex items-center gap-2">
+                <i data-lucide="info" class="w-5 h-5"></i> Apresentação
+            </button>
+            <button onclick="switchTab('membros')" id="btn-membros" class="pb-3 text-lg font-semibold text-pink-300 hover:text-pink-500 transition-all flex items-center gap-2">
                 <i data-lucide="users" class="w-5 h-5"></i> Membros
             </button>
             <button onclick="switchTab('eventos')" id="btn-eventos" class="pb-3 text-lg font-semibold text-pink-300 hover:text-pink-500 transition-all flex items-center gap-2">
@@ -49,8 +52,28 @@
 
     <main class="max-w-6xl mx-auto px-6 pb-20">
         
+        <!-- SEÇÃO DE APRESENTAÇÃO -->
+        <div id="tab-apresentacao">
+            <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto leading-relaxed">
+                <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center gap-3">
+                    <i data-lucide="sparkles" class="w-8 h-8"></i> Nossa História
+                </h2>
+                <div class="space-y-6 text-slate-600 text-lg">
+                    <p>
+                        O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> dentro do Minecraft. No entanto, nossa comunidade evoluiu: com o crescimento do clã, o interesse por <strong>PVP</strong> aumentou consideravelmente, então nos dias de hoje o clã é misto.
+                    </p>
+                    <p>
+                        A liderança do clã é exercida pela <strong>Luhnny</strong>, contando com o apoio fundamental dos co-líderes <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, que auxiliam no gerenciamento diário e na organização de nossa comunidade.
+                    </p>
+                    <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 italic">
+                        "Nosso objetivo é trazer leveza para a gameplay, mantendo um ambiente saudável e livre de toxicidade. No final das contas, nosso foco principal é e sempre será a diversão!"
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- SEÇÃO DE MEMBROS -->
-        <div id="tab-membros">
+        <div id="tab-membros" class="hidden">
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">
                     Membros Ativos
@@ -474,85 +497,89 @@
             </div>
 
             <!-- Card de Evento em Breve -->
-            <div class="bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-2xl mx-auto">
+            <div class="bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
                 <div class="inline-flex p-4 bg-pink-50 rounded-full text-pink-400 mb-6">
                     <i data-lucide="calendar-heart" class="w-12 h-12"></i>
                 </div>
                 <h3 class="text-3xl font-extrabold text-pink-500 mb-2">EM BREVE</h3>
-                <p class="text-slate-500 mb-8">Estamos preparando eventos divertidos para o clã!</p>
+                <p class="text-slate-500 mb-8 text-lg">Estamos preparando eventos divertidos para o clã!</p>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left border-t border-pink-50 pt-8 mb-8">
-                    <div class="space-y-4">
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="calendar-days" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-left border-t border-pink-50 pt-8 mb-8">
+                    <div class="space-y-5">
+                        <div class="flex items-start gap-4">
+                            <i data-lucide="calendar-days" class="w-6 h-6 text-pink-300 mt-1"></i>
                             <div>
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Data do evento</p>
-                                <p class="text-sm font-medium">A definir</p>
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Data do evento</p>
+                                <p class="text-base font-medium">A definir</p>
                             </div>
                         </div>
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="clock-3" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                        <div class="flex items-start gap-4">
+                            <i data-lucide="clock-3" class="w-6 h-6 text-pink-300 mt-1"></i>
                             <div>
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Hora do evento</p>
-                                <p class="text-sm font-medium">A definir</p>
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Hora do evento</p>
+                                <p class="text-base font-medium">A definir</p>
                             </div>
                         </div>
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="map-pin" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                        <div class="flex items-start gap-4">
+                            <i data-lucide="map-pin" class="w-6 h-6 text-pink-300 mt-1"></i>
                             <div>
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Local do evento</p>
-                                <p class="text-sm font-medium">A definir</p>
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Local do evento</p>
+                                <p class="text-base font-medium">A definir</p>
                             </div>
                         </div>
                     </div>
 
-                    <div class="space-y-4">
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="sparkles" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                    <div class="space-y-5">
+                        <div class="flex items-start gap-4">
+                            <i data-lucide="sparkles" class="w-6 h-6 text-pink-300 mt-1"></i>
                             <div>
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Tema do evento</p>
-                                <p class="text-sm font-medium">A definir</p>
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Tema do evento</p>
+                                <p class="text-base font-medium">A definir</p>
                             </div>
                         </div>
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="trophy" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                        <div class="flex items-start gap-4">
+                            <i data-lucide="trophy" class="w-6 h-6 text-pink-300 mt-1"></i>
                             <div>
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Prêmios</p>
-                                <ul class="text-xs space-y-1 font-medium text-slate-600">
-                                    <li>🥇 1º Lugar: <span class="text-pink-400">?</span></li>
-                                    <li>🥈 2º Lugar: <span class="text-pink-400">?</span></li>
-                                    <li>🥉 3º Lugar: <span class="text-pink-400">?</span></li>
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Prêmios</p>
+                                <ul class="text-sm space-y-1.5 font-medium text-slate-600 mt-1">
+                                    <li class="flex items-center gap-2">🥇 1º Lugar: <span class="text-pink-500 font-bold">?</span></li>
+                                    <li class="flex items-center gap-2">🥈 2º Lugar: <span class="text-pink-400 font-bold">?</span></li>
+                                    <li class="flex items-center gap-2">🥉 3º Lugar: <span class="text-pink-300 font-bold">?</span></li>
                                 </ul>
                             </div>
                         </div>
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="lightbulb" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                        <div class="flex items-start gap-4">
+                            <i data-lucide="lightbulb" class="w-6 h-6 text-pink-300 mt-1"></i>
                             <div>
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Ideia por</p>
-                                <p class="text-sm font-medium italic text-slate-400 text-xs">Membro destaque</p>
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Ideia por</p>
+                                <p class="text-base font-medium italic text-slate-400">Membro destaque</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Novas Secções: Regras e Funcionamento -->
-                <div class="grid grid-cols-1 gap-6 text-left border-t border-pink-50 pt-8">
-                    <div class="space-y-4">
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="clipboard-list" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                <!-- Seções Adicionais: Regras e Funcionamento -->
+                <div class="grid grid-cols-1 gap-8 text-left border-t border-pink-50 pt-8">
+                    <div class="space-y-6">
+                        <div class="flex items-start gap-4">
+                            <div class="p-2 bg-pink-50 rounded-xl text-pink-400">
+                                <i data-lucide="clipboard-list" class="w-6 h-6"></i>
+                            </div>
                             <div class="w-full">
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Regras do evento</p>
-                                <div class="bg-pink-50/50 p-4 rounded-2xl mt-2 text-sm text-slate-600 italic">
-                                    A definir
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider mb-2">Regras do evento</p>
+                                <div class="bg-slate-50 p-5 rounded-2xl text-sm text-slate-500 italic border border-slate-100">
+                                    Regulamento em fase de elaboração...
                                 </div>
                             </div>
                         </div>
-                        <div class="flex items-start gap-3">
-                            <i data-lucide="settings" class="w-5 h-5 text-pink-300 mt-0.5"></i>
+                        <div class="flex items-start gap-4">
+                            <div class="p-2 bg-pink-50 rounded-xl text-pink-400">
+                                <i data-lucide="settings" class="w-6 h-6"></i>
+                            </div>
                             <div class="w-full">
-                                <p class="text-[10px] font-bold uppercase text-pink-400">Como vai funcionar</p>
-                                <div class="bg-pink-50/50 p-4 rounded-2xl mt-2 text-sm text-slate-600 italic">
-                                    A definir
+                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider mb-2">Como vai funcionar</p>
+                                <div class="bg-slate-50 p-5 rounded-2xl text-sm text-slate-500 italic border border-slate-100">
+                                    Instruções de participação em breve...
                                 </div>
                             </div>
                         </div>
@@ -571,33 +598,29 @@
         // Inicializa os ícones do Lucide
         lucide.createIcons();
 
-        // Função para trocar de abas
+        // Função universal para trocar de abas
         function switchTab(tab) {
-            const tabMembros = document.getElementById('tab-membros');
-            const tabEventos = document.getElementById('tab-eventos');
-            const btnMembros = document.getElementById('btn-membros');
-            const btnEventos = document.getElementById('btn-eventos');
-
-            if (tab === 'membros') {
-                tabMembros.classList.remove('hidden');
-                tabEventos.classList.add('hidden');
+            // Lista de IDs das abas e botões
+            const tabs = ['apresentacao', 'membros', 'eventos'];
+            
+            tabs.forEach(t => {
+                const tabElement = document.getElementById('tab-' + t);
+                const btnElement = document.getElementById('btn-' + t);
                 
-                btnMembros.classList.add('tab-active');
-                btnMembros.classList.remove('text-pink-300');
-                
-                btnEventos.classList.remove('tab-active');
-                btnEventos.classList.add('text-pink-300');
-            } else {
-                tabMembros.classList.add('hidden');
-                tabEventos.classList.remove('hidden');
-                
-                btnEventos.classList.add('tab-active');
-                btnEventos.classList.remove('text-pink-300');
-                
-                btnMembros.classList.remove('tab-active');
-                btnMembros.classList.add('text-pink-300');
-            }
-            // Reinicializa ícones caso necessário após mudar o DOM
+                if (t === tab) {
+                    // Ativa a aba clicada
+                    tabElement.classList.remove('hidden');
+                    btnElement.classList.add('tab-active');
+                    btnElement.classList.remove('text-pink-300');
+                } else {
+                    // Esconde as outras
+                    tabElement.classList.add('hidden');
+                    btnElement.classList.remove('tab-active');
+                    btnElement.classList.add('text-pink-300');
+                }
+            });
+            
+            // Re-renderiza ícones para garantir que apareçam em abas trocadas
             lucide.createIcons();
         }
     </script>
