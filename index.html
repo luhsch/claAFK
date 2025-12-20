@@ -25,13 +25,28 @@
         .hidden {
             display: none;
         }
+        /* Animação suave para o distintivo de recrutamento */
+        @keyframes subtle-pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.9; }
+        }
+        .recruitment-badge {
+            animation: subtle-pulse 3s infinite ease-in-out;
+        }
     </style>
 </head>
 <body class="min-h-screen text-slate-800">
 
     <!-- Cabeçalho -->
-    <header class="py-12 px-4 text-center pink-gradient text-white shadow-lg mb-6">
-        <h1 class="text-5xl font-extrabold tracking-tight mb-2 drop-shadow-md">CLÃ AFK</h1>
+    <header class="py-16 px-4 text-center pink-gradient text-white shadow-lg mb-6 relative overflow-hidden">
+        <!-- Distintivo de Recrutamento (Maior e mais visível) -->
+        <div class="absolute top-6 right-6 md:top-8 md:right-12 recruitment-badge">
+            <div class="bg-white text-pink-600 px-5 py-2 rounded-2xl text-xs font-bold uppercase tracking-widest border-2 border-pink-200 shadow-2xl flex items-center gap-2">
+                <i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado
+            </div>
+        </div>
+        
+        <h1 class="text-6xl font-extrabold tracking-tight mb-2 drop-shadow-md">CLÃ AFK</h1>
         <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest">Criado por Luhnny</p>
     </header>
 
@@ -77,6 +92,12 @@
                     </p>
                     <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 italic">
                         "Nosso objetivo é trazer leveza para a gameplay, mantendo um ambiente saudável e livre de toxicidade. No final das contas, nosso foco principal é e sempre será a diversão!"
+                    </div>
+
+                    <!-- Status de Recrutamento na Apresentação -->
+                    <div class="mt-10 flex items-center justify-center gap-3 py-4 px-6 bg-slate-50 rounded-3xl text-slate-400 border-2 border-dashed border-slate-200">
+                        <i data-lucide="user-x" class="w-6 h-6"></i>
+                        <span class="text-sm font-bold tracking-widest uppercase">O recrutamento está fechado no momento</span>
                     </div>
                 </div>
             </div>
@@ -610,7 +631,6 @@
 
         // Função universal para trocar de abas
         function switchTab(tab) {
-            // Lista de IDs das abas e botões
             const tabs = ['apresentacao', 'membros', 'eventos'];
             
             tabs.forEach(t => {
@@ -618,19 +638,16 @@
                 const btnElement = document.getElementById('btn-' + t);
                 
                 if (t === tab) {
-                    // Ativa a aba clicada
                     tabElement.classList.remove('hidden');
                     btnElement.classList.add('tab-active');
                     btnElement.classList.remove('text-pink-300');
                 } else {
-                    // Esconde as outras
                     tabElement.classList.add('hidden');
                     btnElement.classList.remove('tab-active');
                     btnElement.classList.add('text-pink-300');
                 }
             });
             
-            // Re-renderiza ícones para garantir que apareçam em abas trocadas
             lucide.createIcons();
         }
     </script>
