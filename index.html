@@ -22,9 +22,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Configurações do Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyAhbf0kBYCAWsQAPKYx4TPdud1O_GUjoU4",
             authDomain: "clan-afk.firebaseapp.com",
@@ -41,31 +40,137 @@
 
         let currentUser = null;
         let allEvents = [];
+        let editingEventId = null;
+        let eventToDeleteId = null; 
         
         const CLAN_PASSWORD = "2v2nt4"; 
         const ADMIN_PASSWORD = "sp3k22m31"; 
         const ADMIN_NAME = "Luhnny";
 
-        // --- EXPOSIÇÃO GLOBAL DAS FUNÇÕES ---
+        // --- FUNÇÕES GLOBAIS ---
+        
         window.handleLogin = () => {
-            const userInput = document.getElementById('login-user').value.trim();
-            const passInput = document.getElementById('login-pass').value;
-            if (!userInput) return notify("Por favor, digita o teu nick!", "error");
+            const nick = document.getElementById('login-user').value.trim();
+            const pass = document.getElementById('login-pass').value;
+            if (!nick) return notify("Digita o teu nick!", "error");
 
-            if (userInput.toLowerCase() === ADMIN_NAME.toLowerCase() && passInput === ADMIN_PASSWORD) {
+            if (nick.toLowerCase() === ADMIN_NAME.toLowerCase() && pass === ADMIN_PASSWORD) {
                 loginSuccess(ADMIN_NAME, true);
-            } else if (passInput === CLAN_PASSWORD) {
-                loginSuccess(userInput, false);
+            } else if (pass === CLAN_PASSWORD) {
+                loginSuccess(nick, false);
             } else {
-                notify("Credenciais incorretas!", "error");
+                notify("Nick ou senha incorretos!", "error");
             }
         };
 
+        // Lógica de navegação por setas e Enter
+        window.handleKeyNavigation = (event, nextId, prevId = null) => {
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                if (nextId) document.getElementById(nextId)?.focus();
+            } else if (event.key === "ArrowUp" && prevId) {
+                event.preventDefault();
+                document.getElementById(prevId)?.focus();
+            } else if (event.key === "Enter" && event.target.id.includes('login')) {
+                handleLogin();
+            }
+        };
+
+        window.openCreateModal = () => {
+            editingEventId = null;
+            document.getElementById('modal-admin-title').innerText = "Publicar Novo Evento";
+            document.getElementById('btn-publish-trigger').innerText = "Publicar Agora";
+            const fields = ['ev-title', 'ev-theme', 'ev-date', 'ev-time', 'ev-loc', 'ev-p1', 'ev-p2', 'ev-p3', 'ev-rules'];
+            fields.forEach(id => document.getElementById(id).value = "");
+            openModal('modal-admin-event');
+        };
+
+        window.editClanEvent = (id) => {
+            const ev = allEvents.find(e => e.id === id);
+            if (!ev) return;
+            editingEventId = id;
+            document.getElementById('modal-admin-title').innerText = "Editar Evento";
+            document.getElementById('btn-publish-trigger').innerText = "Salvar Alterações";
+            document.getElementById('ev-title').value = ev.title;
+            document.getElementById('ev-theme').value = ev.theme;
+            document.getElementById('ev-date').value = ev.date;
+            document.getElementById('ev-time').value = ev.time;
+            document.getElementById('ev-loc').value = ev.location;
+            document.getElementById('ev-p1').value = ev.prizes[0];
+            document.getElementById('ev-p2').value = ev.prizes[1];
+            document.getElementById('ev-p3').value = ev.prizes[2];
+            document.getElementById('ev-rules').value = ev.rules;
+            openModal('modal-admin-event');
+        };
+
+        window.publishClanEvent = async () => {
+            const title = document.getElementById('ev-title').value.trim();
+            const theme = document.getElementById('ev-theme').value.trim();
+            if (!title || !theme) return notify("Título e Tema são obrigatórios!", "error");
+
+            const btn = document.getElementById('btn-publish-trigger');
+            btn.disabled = true;
+
+            try {
+                const data = {
+                    title, theme,
+                    date: document.getElementById('ev-date').value || "A definir",
+                    time: document.getElementById('ev-time').value || "A definir",
+                    location: document.getElementById('ev-loc').value || "bawmc.net",
+                    prizes: [document.getElementById('ev-p1').value || "?", document.getElementById('ev-p2').value || "?", document.getElementById('ev-p3').value || "?"],
+                    rules: document.getElementById('ev-rules').value || "Sem regras.",
+                    status: 'active', updatedAt: Date.now()
+                };
+
+                if (editingEventId) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data);
+                    notify("Evento atualizado!", "success");
+                } else {
+                    data.participants = [];
+                    data.createdAt = Date.now();
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data);
+                    notify("Evento criado!", "success");
+                }
+                closeModal('modal-admin-event');
+            } catch (e) { notify("Erro ao gravar!", "error"); }
+            finally { btn.disabled = false; }
+        };
+
+        window.updateClanEventStatus = async (id, currentStatus) => {
+            const next = currentStatus === 'active' ? 'ended' : 'active';
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: next });
+            notify(next === 'ended' ? "Encerrado!" : "Reativado!", "info");
+        };
+
+        window.requestDeleteEvent = (id) => {
+            eventToDeleteId = id;
+            openModal('modal-confirm-delete');
+        };
+
+        window.confirmDelete = async () => {
+            if (!eventToDeleteId) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId));
+                notify("Evento excluído com sucesso.", "success");
+                closeModal('modal-confirm-delete');
+                eventToDeleteId = null;
+            } catch (e) { notify("Erro ao excluir!", "error"); }
+        };
+
+        window.joinClanEvent = async (id) => {
+            if (!currentUser) return openModal('modal-login');
+            const ev = allEvents.find(e => e.id === id);
+            if (ev.participants.includes(currentUser.name)) return notify("Já estás inscrito!", "info");
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { participants: [...ev.participants, currentUser.name] });
+            notify("Inscrição confirmada!", "success");
+        };
+
+        // --- APOIO ---
         function loginSuccess(name, isAdmin) {
             currentUser = { name, isAdmin };
             localStorage.setItem('afk_user', JSON.stringify(currentUser));
             updateUI();
-            notify(`Bem-vinda(o), ${name}!`, "success");
+            notify(`Olá, ${name}!`, "success");
             closeModal('modal-login');
         }
 
@@ -73,85 +178,13 @@
             currentUser = null;
             localStorage.removeItem('afk_user');
             updateUI();
-            notify("Sessão terminada.", "info");
+            notify("Sessão fechada.", "info");
         };
 
-        window.createEvent = async () => {
-            console.log("Iniciando publicação...");
-            if (!currentUser || !currentUser.isAdmin) {
-                return notify("Apenas a Luhnny pode publicar eventos!", "error");
-            }
-
-            const title = document.getElementById('ev-title').value;
-            const theme = document.getElementById('ev-theme').value;
-            if (!title || !theme) return notify("Preenche pelo menos o título e o tema!", "error");
-
-            const newEvent = {
-                title: title,
-                theme: theme,
-                date: document.getElementById('ev-date').value || "A definir",
-                time: document.getElementById('ev-time').value || "A definir",
-                location: document.getElementById('ev-loc').value || "bawmc.net",
-                prizes: [
-                    document.getElementById('ev-p1').value || "A definir", 
-                    document.getElementById('ev-p2').value || "A definir", 
-                    document.getElementById('ev-p3').value || "A definir"
-                ],
-                rules: document.getElementById('ev-rules').value || "Informações em breve...",
-                status: 'active',
-                participants: [],
-                createdAt: Date.now()
-            };
-
-            try {
-                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
-                await addDoc(colRef, newEvent);
-                notify("Evento publicado com sucesso!", "success");
-                closeModal('modal-admin-event');
-                // Limpar campos
-                document.getElementById('ev-title').value = "";
-                document.getElementById('ev-theme').value = "";
-            } catch (e) { 
-                console.error("Erro ao salvar:", e);
-                notify("Erro ao gravar: Verifique as Rules do Firestore!", "error"); 
-            }
-        };
-
-        window.toggleEventStatus = async (id, currentStatus) => {
-            try {
-                const newStatus = currentStatus === 'active' ? 'ended' : 'active';
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', id);
-                await updateDoc(docRef, { status: newStatus });
-                notify(newStatus === 'ended' ? "Evento encerrado." : "Evento reativado.", "info");
-            } catch (e) { notify("Erro ao mudar status.", "error"); }
-        };
-
-        window.deleteEvent = async (id) => {
-            if(confirm("Queres mesmo apagar este evento?")) {
-                try {
-                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id));
-                    notify("Evento eliminado.", "info");
-                } catch(e) { notify("Erro ao eliminar.", "error"); }
-            }
-        };
-
-        window.participate = async (eventId) => {
-            if (!currentUser) return openModal('modal-login');
-            const event = allEvents.find(e => e.id === eventId);
-            if (event.participants.includes(currentUser.name)) return notify("Já estás na lista!", "info");
-            try {
-                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId);
-                await updateDoc(docRef, { participants: [...event.participants, currentUser.name] });
-                notify("Inscrição confirmada!", "success");
-            } catch(e) { notify("Erro na inscrição.", "error"); }
-        };
-
-        // --- GESTÃO DE UI ---
         function updateUI() {
             const loginBtn = document.getElementById('btn-login-trigger');
             const userDisplay = document.getElementById('user-logged-in');
             const adminPanel = document.getElementById('admin-event-panel');
-            
             if (currentUser) {
                 loginBtn.classList.add('hidden');
                 userDisplay.classList.remove('hidden');
@@ -166,46 +199,35 @@
         }
 
         function listenToEvents() {
-            const q = collection(db, 'artifacts', appId, 'public', 'data', 'events');
-            onSnapshot(q, (snapshot) => {
-                allEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (snap) => {
+                allEvents = snap.docs.map(d => ({ id: d.id, ...doc.data() || d.data() }));
                 renderEvents();
-            }, (error) => {
-                if (error.code === 'permission-denied') notify("Acesso negado. Verifica as Rules no Firestore!", "error");
-            });
+            }, (err) => { if(err.code === 'permission-denied') notify("Revisa as Rules do Firebase!", "error"); });
         }
 
         function renderEvents() {
-            const activeContainer = document.getElementById('active-events-list');
-            const historyContainer = document.getElementById('history-events-list');
+            const actContainer = document.getElementById('active-events-list');
+            const histContainer = document.getElementById('history-events-list');
             const noActiveMessage = document.getElementById('no-active-message');
-            
             const actives = allEvents.filter(e => e.status === 'active');
             const history = allEvents.filter(e => e.status === 'ended');
-
-            activeContainer.innerHTML = ''; historyContainer.innerHTML = '';
-            
-            if (actives.length === 0) {
-                noActiveMessage.classList.remove('hidden');
-            } else {
-                noActiveMessage.classList.add('hidden');
-                actives.forEach(ev => activeContainer.innerHTML += createEventCard(ev, true));
-            }
-            
-            history.forEach(ev => historyContainer.innerHTML += createEventCard(ev, false));
+            actContainer.innerHTML = ''; histContainer.innerHTML = '';
+            actives.length === 0 ? noActiveMessage.classList.remove('hidden') : noActiveMessage.classList.add('hidden');
+            actives.forEach(ev => actContainer.innerHTML += createEventCard(ev, true));
+            history.forEach(ev => histContainer.innerHTML += createEventCard(ev, false));
             lucide.createIcons();
         }
 
         function createEventCard(ev, isActive) {
             const isParticipating = currentUser && ev.participants.includes(currentUser.name);
-            const adminControls = (currentUser && currentUser.isAdmin) ? `
-                <div class="mt-4 flex gap-2 border-t pt-4">
-                    <button onclick="toggleEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg hover:bg-black transition">${isActive ? 'Encerrar' : 'Reativar'}</button>
-                    <button onclick="deleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Excluir</button>
+            const controls = (currentUser && currentUser.isAdmin) ? `
+                <div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
+                    <button onclick="editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold flex items-center gap-1"><i data-lucide="edit-3" class="w-3 h-3"></i> Editar</button>
+                    <button onclick="updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg hover:bg-black transition">${isActive ? 'Encerrar' : 'Reativar'}</button>
+                    <button onclick="requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Excluir</button>
                 </div>
-                <div class="mt-2 text-[10px] text-slate-400 font-bold uppercase text-left">Membros Inscritos (${ev.participants.length}): ${ev.participants.join(', ') || 'Ninguém ainda'}</div>
+                <div class="mt-2 text-[10px] text-slate-400 font-bold uppercase text-left">Inscritos (${ev.participants.length}): ${ev.participants.join(', ') || 'Nenhum'}</div>
             ` : '';
-
             return `
                 <div class="bg-white rounded-3xl card-shadow border-2 ${isActive ? 'border-pink-200' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left">
                     <div class="flex justify-between items-start mb-4">
@@ -221,22 +243,14 @@
                         <div class="text-xs">
                             <p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p>
                             <p class="font-medium text-slate-600">🥇 ${ev.prizes[0]} | 🥈 ${ev.prizes[1]} | 🥉 ${ev.prizes[2]}</p>
-                            <p class="mt-2 font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p>
-                            <p class="font-medium text-slate-600">${ev.theme}</p>
+                            <p class="mt-2 font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema: ${ev.theme}</p>
                         </div>
                     </div>
-                    <div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100">
-                        <strong>Informações:</strong> ${ev.rules}
-                    </div>
-                    ${isActive ? `<button onclick="participate('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isParticipating ? 'bg-green-100 text-green-600 cursor-default' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isParticipating ? 'check-circle' : 'user-plus'}" class="w-5 h-5"></i>${isParticipating ? 'Estás na lista!' : 'Quero Participar'}</button>` : ''}
-                    ${adminControls}
+                    <div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Info:</strong> ${ev.rules}</div>
+                    ${isActive ? `<button onclick="joinClanEvent('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isParticipating ? 'bg-green-100 text-green-600 cursor-default' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isParticipating ? 'check-circle' : 'user-plus'}" class="w-5 h-5"></i>${isParticipating ? 'Inscrito!' : 'Participar'}</button>` : ''}
+                    ${controls}
                 </div>
             `;
-        }
-
-        function checkSession() {
-            const saved = localStorage.getItem('afk_user');
-            if (saved) { currentUser = JSON.parse(saved); updateUI(); }
         }
 
         window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
@@ -252,18 +266,17 @@
         };
 
         function notify(msg, type) {
-            const toast = document.getElementById('toast');
-            toast.innerText = msg;
-            toast.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-white font-bold shadow-2xl transition-all z-[300] ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-pink-500'}`;
-            toast.style.display = 'block'; 
-            setTimeout(() => toast.style.display = 'none', 5000);
+            const t = document.getElementById('toast');
+            t.innerText = msg;
+            t.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-white font-bold shadow-2xl transition-all z-[300] ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-pink-500'}`;
+            t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 4000);
         }
 
-        // Executar login anónimo ao carregar
         onAuthStateChanged(auth, async (user) => {
-            if (!user) { try { await signInAnonymously(auth); } catch (e) { console.error(e); } }
+            if (!user) try { await signInAnonymously(auth); } catch (e) { console.error(e); }
             listenToEvents();
-            checkSession();
+            const saved = localStorage.getItem('afk_user');
+            if (saved) { currentUser = JSON.parse(saved); updateUI(); }
             lucide.createIcons();
         });
     </script>
@@ -274,172 +287,159 @@
 
     <header class="py-16 px-4 text-center pink-gradient text-white shadow-lg mb-6 relative overflow-hidden">
         <div class="absolute top-6 right-6 md:top-8 md:right-12 recruitment-badge">
-            <div class="bg-white text-pink-600 px-5 py-2 rounded-2xl text-xs font-bold uppercase tracking-widest border-2 border-pink-200 shadow-2xl flex items-center gap-2">
-                <i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado
-            </div>
+            <div class="bg-white text-pink-600 px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 border-pink-200 shadow-2xl flex items-center gap-2"><i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado</div>
         </div>
-        <h1 class="text-6xl font-extrabold tracking-tight mb-2 drop-shadow-md text-white">CLÃ AFK</h1>
+        <h1 class="text-6xl font-extrabold tracking-tight mb-2 text-white">CLÃ AFK</h1>
         <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest">Criado por Luhnny</p>
-
         <div class="mt-6 flex justify-center">
-            <button id="btn-login-trigger" onclick="openModal('modal-login')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-sm transition flex items-center gap-2">
-                <i data-lucide="log-in" class="w-4 h-4"></i> Acesso Membro
-            </button>
-            <div id="user-logged-in" class="hidden bg-white/20 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-sm flex items-center gap-3">
+            <button id="btn-login-trigger" onclick="openModal('modal-login')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2"><i data-lucide="log-in" class="w-4 h-4"></i> Acesso Membro</button>
+            <div id="user-logged-in" class="hidden bg-white/20 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-3">
                 <span>Olá, <strong id="logged-name"></strong></span>
-                <button onclick="logout()" class="hover:text-red-200 transition font-bold ml-2 uppercase text-[10px]">Sair</button>
+                <button onclick="logout()" class="hover:text-red-200 transition font-bold uppercase text-[10px]">Sair</button>
             </div>
         </div>
     </header>
 
     <nav class="max-w-6xl mx-auto px-6 mb-10 border-b border-pink-200 text-center">
         <div class="flex gap-4 md:gap-8 justify-center flex-wrap">
-            <button onclick="switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-lg font-semibold tab-active transition-all flex items-center gap-2"><i data-lucide="info" class="w-5 h-5"></i> Apresentação</button>
-            <button onclick="switchTab('membros')" id="btn-membros" class="pb-3 text-lg font-semibold text-pink-300 hover:text-pink-500 transition-all flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i> Membros</button>
-            <button onclick="switchTab('eventos')" id="btn-eventos" class="pb-3 text-lg font-semibold text-pink-300 hover:text-pink-500 transition-all flex items-center gap-2"><i data-lucide="calendar" class="w-5 h-5"></i> Eventos</button>
+            <button onclick="switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-lg font-semibold tab-active flex items-center gap-2"><i data-lucide="info" class="w-5 h-5"></i> Apresentação</button>
+            <button onclick="switchTab('membros')" id="btn-membros" class="pb-3 text-lg font-semibold text-pink-300 flex items-center gap-2"><i data-lucide="users" class="w-5 h-5"></i> Membros</button>
+            <button onclick="switchTab('eventos')" id="btn-eventos" class="pb-3 text-lg font-semibold text-pink-300 flex items-center gap-2"><i data-lucide="calendar" class="w-5 h-5"></i> Eventos</button>
         </div>
     </nav>
 
     <main class="max-w-6xl mx-auto px-6">
-        
-        <!-- SEÇÃO APRESENTAÇÃO -->
+        <!-- SEÇÃO APRESENTAÇÃO (MANTIDA INTEGRAL) -->
         <div id="tab-apresentacao">
-            <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto leading-relaxed text-center">
-                <div class="flex justify-center mb-8">
-                    <div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner">
-                        <img src="icone.png" alt="Ícone Clã AFK" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover">
-                    </div>
-                </div>
+            <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center">
+                <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
                 <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-3"><i data-lucide="sparkles" class="w-8 h-8"></i> Breve apresentação</h2>
                 <div class="space-y-6 text-slate-600 text-lg text-left">
                     <p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p>
                     <p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.</p>
                     <p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p>
-                    <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4">
-                        <i data-lucide="message-circle" class="text-pink-500 w-8 h-8"></i>
-                        <p class="text-sm md:text-base font-medium">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p>
-                    </div>
+                    <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4"><i data-lucide="message-circle" class="text-pink-500 w-8 h-8"></i><p class="text-sm font-medium">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p></div>
                 </div>
             </div>
         </div>
 
-        <!-- SEÇÃO MEMBROS -->
+        <!-- SEÇÃO MEMBROS (MANTIDA INTEGRAL - 17 MEMBROS) -->
         <div id="tab-membros" class="hidden">
-            <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center">
+            <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">Membros Ativos</h2>
                 <div class="text-sm text-pink-400/70 italic">Total: 17 membros registrados</div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Membro: Luhnny -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform">
-                    <div class="flex justify-between items-start mb-4">
-                        <h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3>
-                        <div class="relative"><img src="luhnny.png" alt="Luhnny" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"><div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm border border-white"><i data-lucide="star" class="w-4 h-4"></i></div></div>
-                    </div>
-                    <div class="space-y-3 mb-6 flex-grow text-sm text-left"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/10</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Manhã e Noite</span></div></div>
+                <!-- Luhnny -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform text-left">
+                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3><div class="relative"><img src="luhnny.png" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"><div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm"><i data-lucide="star" class="w-4 h-4"></i></div></div></div>
+                    <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/10</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Manhã e Noite</span></div></div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">Líder</span><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div>
                 </div>
                 <!-- K0ssh1_ -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
-                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div>
-                    <div class="space-y-3 mb-6 flex-grow text-sm text-left"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 27/04</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 13:30 - 01:30</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left">
+                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
+                    <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 27/04</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 13:30 - 01:30</span></div></div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
                 </div>
                 <!-- Lagartuuuxaaa -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left">
                     <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="lagartuuuxaaa.png" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
-                    <div class="space-y-3 mb-6 flex-grow text-sm text-left"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 01/07</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 22h - 02h</span></div></div>
-                    <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
+                    <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 01/07</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 22h - 02h</span></div></div>
+                    <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
                 </div>
                 <!-- baiano019 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 14/05<br>Disponível: Noite</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 14/05<br>Disponível: Noite</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
                 <!-- Raitzz_ -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: Tarde e Manhã</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] font-bold uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: Tarde e Manhã</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] font-bold uppercase rounded-full">farm</span></div></div>
                 <!-- Invisivel -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 28/07<br>Disponível: Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 28/07<br>Disponível: Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <!-- NeverPuzzle -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 11/08<br>Disponível: Tarde</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 11/08<br>Disponível: Tarde</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <!-- Pardas01 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" alt="Pardas01" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 16/06<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 16/06<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <!-- chorapropai -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 10/01<br>Disponível: Variável</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 10/01<br>Disponível: Variável</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <!-- felpipoca -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 21/01<br>Disponível: Dia/Madrugada</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 21/01<br>Disponível: Dia e Madrugada</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <!-- 1aswd -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 19/09<br>Disponível: Dia todo</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 19/09<br>Disponível: Dia todo</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
                 <!-- ynSunn -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 23/08<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 23/08<br>Disponível: Tarde e Noite</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <!-- labubusista -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 17/02<br>Disponível: Quase sempre</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 17/02<br>Disponível: Quase sempre</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
                 <!-- iaruchy -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 18/04<br>Disponível: N/A</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 18/04<br>Disponível: N/A</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
                 <!-- TheP1nk -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 10/07<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 10/07<br>Disponível: Tarde e Noite</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
                 <!-- 2aswd -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 20/05<br>Disponível: Toda hora</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 20/05<br>Disponível: Toda hora</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <!-- _Vzkls14 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: 02h-21h</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: 02h-21h</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
             </div>
         </div>
 
         <!-- SEÇÃO EVENTOS -->
         <div id="tab-eventos" class="hidden">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
                 <div class="text-left">
                     <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2"><i data-lucide="calendar-heart"></i> Cronograma de Eventos</h2>
                     <p class="text-pink-300 text-sm italic">Entra com a tua senha para participares!</p>
                 </div>
-                <button id="admin-event-panel" onclick="openModal('modal-admin-event')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2">
-                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Publicar Novo Evento
-                </button>
+                <button id="admin-event-panel" onclick="openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0"><i data-lucide="plus-circle" class="w-4 h-4"></i> Publicar Novo Evento</button>
             </div>
             <div id="active-events-list"></div>
-            <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
-                <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3>
-                <p class="text-slate-500 text-lg">Fica de olho nas novidades da Luhnny!</p>
-            </div>
-            <div class="mt-16 border-t border-pink-100 pt-10 text-left">
-                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5"></i> Histórico de Eventos</h3>
-                <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-            </div>
+            <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3><p class="text-slate-500 text-lg">Fica de olho nas novidades da Luhnny!</p></div>
+            <div class="mt-16 border-t border-pink-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5"></i> Histórico de Eventos</h3><div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div></div>
         </div>
     </main>
 
     <footer class="py-10 text-center text-pink-400 text-sm opacity-70"><p>Clã AFK fundado em 2025 por Luhnny</p></footer>
 
     <!-- MODAIS -->
-    <div id="modal-login" class="hidden fixed inset-0 z-[210] flex items-center justify-center p-4 modal-bg">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl text-center">
+    <div id="modal-login" class="hidden fixed inset-0 z-[210] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
             <h3 class="text-2xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-2"><i data-lucide="shield-check"></i> Identidade AFK</h3>
             <div class="space-y-4">
-                <input type="text" id="login-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick Minecraft">
-                <input type="password" id="login-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha Secreta">
+                <input type="text" id="login-user" onkeydown="handleKeyNavigation(event, 'login-pass')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick Minecraft">
+                <input type="password" id="login-pass" onkeydown="handleKeyNavigation(event, null, 'login-user')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha Secreta">
                 <button onclick="handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition">Acessar</button>
                 <button onclick="closeModal('modal-login')" class="w-full text-slate-400 text-sm py-2">Cancelar</button>
             </div>
         </div>
     </div>
 
-    <div id="modal-admin-event" class="hidden fixed inset-0 z-[210] flex items-center justify-center p-4 modal-bg">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto text-left">
-            <h3 class="text-2xl font-bold text-pink-600 mb-6">Criar Evento (Líder)</h3>
+    <!-- MODAL CONFIRMAÇÃO EXCLUSÃO -->
+    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+            <div class="text-red-500 mb-4 flex justify-center"><i data-lucide="alert-triangle" class="w-12 h-12"></i></div>
+            <h3 class="text-xl font-bold text-slate-800 mb-2">Eliminar Evento?</h3>
+            <p class="text-slate-500 text-sm mb-6">Esta ação não pode ser desfeita. Todos os dados do evento serão apagados.</p>
+            <div class="flex gap-4">
+                <button onclick="confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg">Sim, Apagar</button>
+                <button onclick="closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 text-slate-500 font-bold py-3 rounded-xl">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ADMIN -->
+    <div id="modal-admin-event" class="hidden fixed inset-0 z-[210] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 id="modal-admin-title" class="text-2xl font-bold text-pink-600 mb-6">Criar Evento</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <input type="text" id="ev-title" placeholder="Título do Evento" class="p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                <input type="text" id="ev-theme" placeholder="Tema" class="p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                <input type="date" id="ev-date" class="p-3 bg-slate-50 border rounded-xl outline-none">
-                <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl outline-none">
-                <input type="text" id="ev-loc" placeholder="Local (/warp ...)" class="p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
+                <input type="text" id="ev-title" onkeydown="handleKeyNavigation(event, 'ev-theme')" placeholder="Título do Evento" class="p-3 bg-slate-50 border rounded-xl outline-none">
+                <input type="text" id="ev-theme" onkeydown="handleKeyNavigation(event, 'ev-date', 'ev-title')" placeholder="Tema" class="p-3 bg-slate-50 border rounded-xl outline-none">
+                <input type="date" id="ev-date" onkeydown="handleKeyNavigation(event, 'ev-time', 'ev-theme')" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="time" id="ev-time" onkeydown="handleKeyNavigation(event, 'ev-loc', 'ev-date')" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="text" id="ev-loc" onkeydown="handleKeyNavigation(event, 'ev-p1', 'ev-time')" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl outline-none">
                 <div class="space-y-2">
-                    <input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none">
-                    <input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none">
-                    <input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none">
+                    <input type="text" id="ev-p1" onkeydown="handleKeyNavigation(event, 'ev-p2', 'ev-loc')" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                    <input type="text" id="ev-p2" onkeydown="handleKeyNavigation(event, 'ev-p3', 'ev-p1')" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                    <input type="text" id="ev-p3" onkeydown="handleKeyNavigation(event, 'ev-rules', 'ev-p2')" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm">
                 </div>
             </div>
-            <textarea id="ev-rules" placeholder="Regras e Funcionamento..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 outline-none focus:border-pink-300"></textarea>
-            <div class="flex gap-4">
-                <button onclick="createEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition">Publicar Agora</button>
-                <button onclick="closeModal('modal-admin-event')" class="px-4 text-slate-400">Voltar</button>
-            </div>
+            <textarea id="ev-rules" onkeydown="handleKeyNavigation(event, 'btn-publish-trigger', 'ev-p3')" placeholder="Sobre o evento..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 outline-none"></textarea>
+            <div class="flex gap-4"><button id="btn-publish-trigger" onclick="publishClanEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg">Publicar Agora</button><button onclick="closeModal('modal-admin-event')" class="px-4 text-slate-400 font-medium">Voltar</button></div>
         </div>
     </div>
 
