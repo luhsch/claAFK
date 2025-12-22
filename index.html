@@ -51,10 +51,9 @@
         let allianceToDeleteId = null;
         let applicationToDeleteId = null;
         
-        // --- CONFIGURAÇÃO DE SENHAS ---
         const CLAN_PASSWORD = "senhadificil"; 
-        const ADMIN_PASSWORD = "sp3k22m31"; // Luhnny
-        const SUB_ADMIN_PASSWORD = "senhamegadificil"; // Co-líderes
+        const ADMIN_PASSWORD = "sp3k22m31"; 
+        const SUB_ADMIN_PASSWORD = "senhamegadificil"; 
         const ALLY_PASSWORD = "123alianca";
         
         const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
@@ -106,7 +105,6 @@
             }
         };
 
-        // --- NAVEGAÇÃO DE TECLADO ---
         window.handleKeyNav = (event, nextId, prevId, isLast) => {
             if (event.key === "ArrowDown" && nextId) {
                 event.preventDefault();
@@ -144,8 +142,24 @@
             const pass = document.getElementById('login-ally-pass').value;
             const clan = document.getElementById('login-ally-clan').value;
             if (!nick || !clan) return window.notify("Preenche os dados!", "error");
-            if (pass === ALLY_PASSWORD) { await registerAllyNick(nick, clan); loginSuccess(`${nick} [${clan}]`, false, true); }
-            else window.notify("Senha da aliança incorreta!", "error");
+            
+            if (pass === ALLY_PASSWORD) {
+                const user = auth.currentUser;
+                if (!user) return;
+                const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', nick.toLowerCase());
+                const identitySnap = await getDoc(identityRef);
+                if (identitySnap.exists()) {
+                    if (identitySnap.data().deviceId !== user.uid) {
+                        return window.notify("Nick vinculado a outro computador!", "error");
+                    }
+                } else {
+                    await setDoc(identityRef, { deviceId: user.uid, nick: nick, createdAt: Date.now() });
+                }
+                await registerAllyNick(nick, clan); 
+                loginSuccess(`${nick} [${clan}]`, false, true); 
+            } else {
+                window.notify("Senha da aliança incorreta!", "error");
+            }
         };
 
         async function registerAllyNick(nick, clan) {
@@ -218,17 +232,25 @@
         }
 
         window.updateApplicationStatus = async (id, status) => { 
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), { 
-                status, 
-                handledBy: currentUser.name 
-            }); 
-            window.notify(`Pedido ${status}!`, "success");
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), { status, handledBy: currentUser.name }); 
+            window.notify("Candidatura atualizada!", "success");
         };
 
-        window.requestDeleteApplication = (id) => { applicationToDeleteId = id; window.openModal('modal-confirm-rec-delete'); };
-        window.confirmRecDelete = async () => { if (!applicationToDeleteId) return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.closeModal('modal-confirm-rec-delete'); };
+        window.requestDeleteApplication = (id) => { 
+            applicationToDeleteId = id; 
+            window.openModal('modal-confirm-rec-delete'); 
+        };
 
-        // --- EVENTOS (RESTAURADOS + PERMISSÃO REFINADA) ---
+        window.confirmRecDelete = async () => { 
+            if (!applicationToDeleteId) return; 
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); 
+                window.closeModal('modal-confirm-rec-delete'); 
+                window.notify("Removido.", "success");
+            } catch(e) { window.notify("Erro ao apagar.", "error"); }
+        };
+
+        // --- EVENTOS (RESTAURADOS) ---
         window.openCreateModal = () => { 
             editingEventId = null; 
             document.getElementById('modal-admin-title').innerText = currentUser.name === "Luhnny" ? "Publicar Evento" : "Sugerir Evento"; 
@@ -258,10 +280,7 @@
             const title = document.getElementById('ev-title').value.trim();
             const theme = document.getElementById('ev-theme').value.trim();
             if (!title || !theme) return window.notify("Título e Tema obrigatórios!", "error");
-            
-            // Apenas Luhnny publica direto. Co-líderes sugerem.
             const status = currentUser.name === "Luhnny" ? 'active' : 'suggestion';
-
             const data = {
                 title, theme, date: document.getElementById('ev-date').value || "A definir", time: document.getElementById('ev-time').value || "A definir",
                 location: document.getElementById('ev-loc').value || "bawmc.net", prizes: [document.getElementById('ev-p1').value || "?", document.getElementById('ev-p2').value || "?", document.getElementById('ev-p3').value || "?"],
@@ -296,7 +315,7 @@
                 window.notify("Aliança adicionada!", "success");
             } else {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), data);
-                window.notify("Solicitação enviada para Luhnny!", "success");
+                window.notify("Solicitação enviada!", "success");
             }
             window.closeModal('modal-admin-alliance');
         };
@@ -305,19 +324,23 @@
             if (currentUser.name !== "Luhnny") return;
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: data.name, tag: data.tag, members: [], createdAt: Date.now() });
             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id));
-            window.notify("Solicitação aprovada!", "success");
+            window.notify("Aprovada!", "success");
         };
 
         window.rejectAllianceRequest = async (id) => {
             if (currentUser.name !== "Luhnny") return;
             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id));
-            window.notify("Solicitação rejeitada.", "info");
+            window.notify("Removida.", "info");
         };
 
         window.removeAllyMember = async (id, nick) => {
             const a = allAlliances.find(x => x.id === id);
+            if (!a) return;
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(n => n !== nick) });
         };
+
+        window.requestDeleteAlliance = (id) => { allianceToDeleteId = id; window.openModal('modal-confirm-alliance-delete'); };
+        window.confirmAllianceDelete = async () => { if (!allianceToDeleteId) return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId)); window.closeModal('modal-confirm-alliance-delete'); };
 
         // --- RENDERIZAÇÃO ---
         function populateAllySelect() {
@@ -332,13 +355,14 @@
             const reqC = document.getElementById('alliance-requests-section');
             const reqL = document.getElementById('alliance-requests-list');
             const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            
             c.innerHTML = '';
             if (allAlliances.length === 0) {
                 c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`;
             } else {
                 allAlliances.forEach(a => {
                     const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join('');
-                    c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isAdmin ? `<button onclick="window.openModal('modal-confirm-alliance-delete'); allianceToDeleteId='${a.id}';" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`;
+                    c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isAdmin ? `<button onclick="window.requestDeleteAlliance('${a.id}')" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`;
                 });
             }
             if (currentUser && currentUser.name === "Luhnny" && allAllianceRequests.length > 0) {
@@ -372,7 +396,7 @@
                 if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg">Editar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
             } else if (currentUser && (type === 'active' || type === 'history')) controls = pList;
-            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
+            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
         }
 
         function updateUI() {
@@ -420,17 +444,7 @@
                 allApplications.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => {
                     const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' };
                     const decisor = app.handledBy ? `<p class="text-pink-400 font-bold mt-2 border-t pt-2">Decidido por: ${app.handledBy}</p>` : '';
-                    c.innerHTML += `
-                    <div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left">
-                        <div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div>
-                        <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-600 mb-4 leading-tight">
-                            <p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Clãs:</strong> ${app.clas}</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p>
-                        </div>
-                        ${decisor}
-                        <div class="flex gap-2 border-t pt-4">
-                            <button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-green-600 transition">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-red-600 transition">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                        </div>
-                    </div>`;
+                    c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-[10px] text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Clãs:</strong> ${app.clas}</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div>${decisor}<div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-green-600 transition">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-red-600 transition">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`;
                 });
             }
             lucide.createIcons();
@@ -458,7 +472,7 @@
                 <i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto
             </div>
         </div>
-        <h1 class="text-6xl font-extrabold tracking-tight mb-2 text-white drop-shadow-lg text-center w-full uppercase">CLÃ AFK</h1>
+        <h1 class="text-6xl font-extrabold tracking-tight mb-2 text-white drop-shadow-lg text-center w-full uppercase leading-tight tracking-tighter">CLÃ AFK</h1>
         <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest text-center w-full">Criado por Luhnny</p>
         <div class="mt-6 flex justify-center w-full">
             <button id="btn-login-trigger" onclick="window.openModal('modal-login')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2 uppercase tracking-tighter"><i data-lucide="log-in" class="w-4 h-4"></i> Acessar</button>
@@ -481,23 +495,24 @@
 
     <main class="max-w-6xl mx-auto px-6">
         
-        <!-- APRESENTAÇÃO -->
+        <!-- APRESENTAÇÃO (TEXTO ORIGINAL) -->
         <div id="tab-apresentacao">
             <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed">
-                <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
-                <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-3 text-center w-full uppercase leading-tight"><i data-lucide="sparkles" class="w-8 h-8"></i> Breve apresentação</h2>
+                <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover shadow-sm"></div></div>
+                <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-3 text-center w-full uppercase leading-tight tracking-tighter"><i data-lucide="sparkles" class="w-8 h-8 text-pink-400"></i> Breve apresentação</h2>
                 <div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8">
                     <p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p>
                     <p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.</p>
+                    <p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p>
                 </div>
-                <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left">
-                    <i data-lucide="message-circle" class="text-pink-500 w-8 h-8"></i>
+                <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left shadow-inner transition-transform hover:scale-[1.01]">
+                    <i data-lucide="message-circle" class="text-pink-500 w-10 h-10 flex-shrink-0"></i>
                     <p class="text-sm md:text-base font-medium text-slate-700">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p>
                 </div>
             </div>
         </div>
 
-        <!-- MEMBROS (ORGANIZADO) -->
+        <!-- MEMBROS (18 PERFIS ORGANIZADOS) -->
         <div id="tab-membros" class="hidden">
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users" class="w-6 h-6"></i> Membros Ativos</h2>
@@ -558,92 +573,92 @@
             </div>
             
             <div id="suggestions-section" class="hidden mb-12">
-                <h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center w-full uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Pendentes</h3>
+                <h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center w-full uppercase leading-tight tracking-tighter"><i data-lucide="message-square" class="text-pink-400"></i> Sugestões Pendentes</h3>
                 <div id="suggested-events-list"></div>
             </div>
 
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="calendar-heart"></i> Cronograma</h2>
-                <button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0"><i data-lucide="plus-circle" class="w-4 h-4"></i> Criar / Sugerir Evento</button>
+                <button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight tracking-tighter"><i data-lucide="plus-circle" class="w-4 h-4"></i> Criar / Sugerir Evento</button>
             </div>
 
             <div id="active-events-list"></div>
             
             <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
-                <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase tracking-tighter">Sem eventos ativos</h3>
+                <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase tracking-tighter leading-tight">Sem eventos ativos</h3>
                 <p class="text-slate-500 text-lg leading-relaxed">Novidades em breve!</p>
             </div>
 
             <div class="mt-16 border-t border-pink-100 pt-10 text-left">
-                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider"><i data-lucide="history" class="w-5 h-5"></i> Histórico</h3>
+                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history" class="w-5 h-5"></i> Histórico</h3>
                 <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"></div>
             </div>
         </div>
 
         <!-- ALIANÇAS -->
         <div id="tab-aliancas" class="hidden text-center">
-            <div id="alliance-requests-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-yellow-100">
-                <h3 class="text-xl font-bold text-yellow-600 mb-6 flex items-center gap-2 justify-center"><i data-lucide="clock"></i> Solicitações Pendentes (Luhnny)</h3>
+            <div id="alliance-requests-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-yellow-100 text-center">
+                <h3 class="text-xl font-bold text-yellow-600 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="clock" class="w-6 h-6"></i> Solicitações Pendentes (Luhnny)</h3>
                 <div id="alliance-requests-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
             </div>
-            <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2><button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition">Adicionar Aliança</button></div>
+            <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2><button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition uppercase leading-tight tracking-tighter">Adicionar Aliança</button></div>
             <div id="alliances-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
         </div>
 
         <!-- RECRUTAMENTO -->
         <div id="tab-recrutamento" class="hidden text-center">
             <button id="luhnny-recruitment-toggle" onclick="window.toggleRecruitmentStatus()" class="hidden"></button>
-            <div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200"><h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="shield-check"></i> Gerenciar Pedidos</h2><div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div>
+            <div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200"><h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="shield-check" class="w-6 h-6"></i> Gerenciar Pedidos</h2><div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div>
             <div id="user-status-display" class="max-w-3xl mx-auto mb-10 hidden"></div>
-            <div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed">Neste momento não estamos a aceitar candidaturas.</p></div>
-            <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center"><h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2><form id="form-recruitment" onsubmit="event.preventDefault(); window.submitRecruitment();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Discord (Usuário)*:</label><input type="text" id="rec-discord" required placeholder="Usuário" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Tempo de Jogo (horas)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Simple Voice Chat?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="Sim">Sim</option><option value="Não">Não</option></select></div><div class="col-span-full"><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Mobile ou PC?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2 leading-tight">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div class="col-span-full"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2 leading-tight">Horários Disponíveis:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 h-12"></textarea></div><button type="submit" id="btn-submit-rec" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] active:scale-95 transition-all uppercase tracking-widest leading-tight">Enviar Formulário</button></form></div>
+            <div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto transition-all"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-inner"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight tracking-tighter">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed font-medium">Neste momento não estamos a aceitar candidaturas. Tenta mais tarde!</p></div>
+            <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center"><h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter text-center w-full leading-tight">FORMULÁRIO</h2><form id="form-recruitment" onsubmit="event.preventDefault(); window.submitRecruitment();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Discord (Usuário)*:</label><input type="text" id="rec-discord" required placeholder="Usuário" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Tempo de Jogo (horas)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Simple Voice Chat?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="Sim">Sim</option><option value="Não">Não</option></select></div><div class="col-span-full"><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Mobile ou PC?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2 leading-tight">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div class="col-span-full"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2 leading-tight">Horários Disponíveis:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 h-12 transition-all"></textarea></div><button type="submit" id="btn-submit-rec" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] active:scale-95 transition-all uppercase tracking-widest leading-tight tracking-tighter">Enviar Formulário</button></form></div>
         </div>
     </main>
 
-    <footer class="py-10 text-center text-pink-400 text-sm opacity-70 leading-relaxed"><p>Clã AFK fundado em 2025 por Luhnny</p></footer>
+    <footer class="py-10 text-center text-pink-400 text-sm opacity-70 leading-relaxed text-center w-full uppercase tracking-tighter font-semibold"><p>Clã AFK fundado em 2025 por Luhnny</p></footer>
 
     <!-- MODAIS -->
     <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-center">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
             <div class="flex border-b mb-6"><button id="tab-login-afk" onclick="window.switchLoginTab('afk')" class="flex-1 py-3 text-sm font-semibold login-tab-active uppercase tracking-tighter">Clã AFK</button><button id="tab-login-ally" onclick="window.switchLoginTab('ally')" class="flex-1 py-3 text-sm font-semibold text-slate-400 uppercase tracking-tighter">Aliança</button></div>
             <div id="login-afk-section" class="space-y-4 text-left">
-                <input type="text" id="login-afk-user" onkeydown="window.handleKeyNav(event, 'login-afk-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight" placeholder="Nick">
-                <input type="password" id="login-afk-pass" onkeydown="window.handleKeyNav(event, null, 'login-afk-user', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight" placeholder="Senha">
-                <button onclick="window.handleLoginAFK()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight">Acessar</button>
+                <input type="text" id="login-afk-user" onkeydown="window.handleKeyNav(event, 'login-afk-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Nick">
+                <input type="password" id="login-afk-pass" onkeydown="window.handleKeyNav(event, null, 'login-afk-user', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Senha">
+                <button onclick="window.handleLoginAFK()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight tracking-tighter">Acessar</button>
             </div>
             <div id="login-ally-section" class="hidden space-y-4 text-left">
-                <input type="text" id="login-ally-user" onkeydown="window.handleKeyNav(event, 'login-ally-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight" placeholder="Nick">
-                <input type="password" id="login-ally-pass" onkeydown="window.handleKeyNav(event, 'login-ally-clan', 'login-ally-user', false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight" placeholder="Senha Aliança">
-                <select id="login-ally-clan" onkeydown="window.handleKeyNav(event, null, 'login-ally-pass', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight"></select>
-                <button onclick="window.handleLoginAlly()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight">Entrar como Aliado</button>
+                <input type="text" id="login-ally-user" onkeydown="window.handleKeyNav(event, 'login-ally-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Nick">
+                <input type="password" id="login-ally-pass" onkeydown="window.handleKeyNav(event, 'login-ally-clan', 'login-ally-user', false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Senha Aliança">
+                <select id="login-ally-clan" onkeydown="window.handleKeyNav(event, null, 'login-ally-pass', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all"></select>
+                <button onclick="window.handleLoginAlly()" class="w-full bg-slate-800 text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight tracking-tighter">Entrar como Aliado</button>
             </div>
-            <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-4 uppercase font-semibold text-center tracking-tighter leading-tight">Fechar janela</button>
+            <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-4 uppercase font-semibold text-center tracking-tighter leading-tight hover:text-pink-400 transition-colors">Fechar janela</button>
         </div>
     </div>
 
-    <!-- Modais Confirm -->
-    <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Eliminar Candidatura?</h3><div class="flex gap-4"><button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight">Sim</button><button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight">Não</button></div></div></div>
-    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 uppercase tracking-tighter leading-tight">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight">Não</button></div></div></div>
-    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight">Não</button></div></div></div>
+    <!-- Modais de Confirmação -->
+    <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Eliminar Candidatura?</h3><div class="flex gap-4"><button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 uppercase tracking-tighter leading-tight text-slate-800">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <!-- Modal Admin Evento -->
     <div id="modal-admin-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
             <h3 id="modal-admin-title" class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Evento</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="text" id="ev-title" placeholder="Título*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
-                <input type="text" id="ev-theme" placeholder="Tema*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
+                <input type="text" id="ev-title" placeholder="Título*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
+                <input type="text" id="ev-theme" placeholder="Tema*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
                 <input type="date" id="ev-date" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
                 <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
-                <input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
+                <input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
                 <div class="space-y-2">
-                    <input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight">
-                    <input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight">
-                    <input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight">
+                    <input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight focus:border-pink-300 transition-all">
+                    <input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight focus:border-pink-300 transition-all">
+                    <input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight focus:border-pink-300 transition-all">
                 </div>
             </div>
-            <textarea id="ev-rules" placeholder="Regras e Descrição..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 focus:border-pink-300 outline-none leading-snug"></textarea>
-            <div class="flex gap-4"><button id="btn-publish-trigger" onclick="window.publishClanEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all uppercase font-bold leading-tight">Publicar</button><button onclick="window.closeModal('modal-admin-event')" class="px-4 text-slate-400 text-xs font-bold uppercase leading-tight">Voltar</button></div>
+            <textarea id="ev-rules" placeholder="Regras e Descrição..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 focus:border-pink-300 outline-none leading-snug transition-all"></textarea>
+            <div class="flex gap-4"><button id="btn-publish-trigger" onclick="window.publishClanEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all uppercase font-bold leading-tight tracking-tighter">Publicar / Sugerir</button><button onclick="window.closeModal('modal-admin-event')" class="px-4 text-slate-400 text-xs font-bold uppercase leading-tight tracking-tighter hover:text-pink-400 transition-colors">Voltar</button></div>
         </div>
     </div>
 
@@ -652,10 +667,10 @@
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
             <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Aliança</h3>
             <div class="space-y-4">
-                <input type="text" id="ali-name" placeholder="Nome do Clã" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
-                <input type="text" id="ali-tag" placeholder="Sigla" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
-                <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight">Solicitar / Adicionar</button>
-                <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center tracking-tighter leading-tight">Cancelar</button>
+                <input type="text" id="ali-name" placeholder="Nome do Clã" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
+                <input type="text" id="ali-tag" placeholder="Sigla" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
+                <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight tracking-tighter">Solicitar / Adicionar</button>
+                <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center tracking-tighter leading-tight hover:text-pink-400 transition-colors">Cancelar</button>
             </div>
         </div>
     </div>
