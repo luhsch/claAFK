@@ -23,7 +23,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAhbf0kBYCAWsQAPKYx4TPdud1O_GUjoU4",
@@ -50,6 +50,13 @@
         const ADMIN_PASSWORD = "sp3k22m31"; 
         const ALLY_PASSWORD = "1l31nc1";
         const ADMIN_NAME = "Luhnny";
+
+        // Lista de membros permitidos (extraída da aba Membros)
+        const ALLOWED_MEMBERS = [
+            "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
+            "baiano019", "Raitzz_", "Invisivel", "NeverPuzzle", "chorapropai", 
+            "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14"
+        ];
 
         // --- REGISTO GLOBAL DE FUNÇÕES ---
 
@@ -123,30 +130,71 @@
         };
 
         window.handleLoginAFK = () => {
-            const nick = document.getElementById('login-afk-user').value.trim();
+            const nickInput = document.getElementById('login-afk-user').value.trim();
             const pass = document.getElementById('login-afk-pass').value;
-            if (!nick) return window.notify("Digita o teu nick!", "error");
-            if (nick.toLowerCase() === ADMIN_NAME.toLowerCase() && pass === ADMIN_PASSWORD) {
-                loginSuccess(ADMIN_NAME, true, false);
-            } else if (pass === CLAN_PASSWORD) {
-                loginSuccess(nick, false, false);
+            
+            if (!nickInput) return window.notify("Digita o teu nick!", "error");
+
+            // 1. Verificar se é Admin
+            if (nickInput.toLowerCase() === ADMIN_NAME.toLowerCase() && pass === ADMIN_PASSWORD) {
+                return loginSuccess(ADMIN_NAME, true, false);
+            } 
+            
+            // 2. Verificar se o nick está na lista de membros permitidos
+            const isMember = ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickInput.toLowerCase());
+            
+            if (!isMember) {
+                return window.notify("Este nick não faz parte do clã AFK!", "error");
+            }
+
+            // 3. Verificar a senha do clã
+            if (pass === CLAN_PASSWORD) {
+                // Encontrar o nick com a capitalização correta da lista
+                const correctNick = ALLOWED_MEMBERS.find(m => m.toLowerCase() === nickInput.toLowerCase());
+                loginSuccess(correctNick, false, false);
             } else {
-                window.notify("Nick ou senha incorretos!", "error");
+                window.notify("Senha incorreta!", "error");
             }
         };
 
-        window.handleLoginAlly = () => {
+        window.handleLoginAlly = async () => {
             const nick = document.getElementById('login-ally-user').value.trim();
             const pass = document.getElementById('login-ally-pass').value;
-            const clan = document.getElementById('login-ally-clan').value;
+            const clanName = document.getElementById('login-ally-clan').value;
             if (!nick) return window.notify("Digita o teu nick!", "error");
-            if (!clan) return window.notify("Seleciona o teu clã aliado!", "error");
+            if (!clanName) return window.notify("Seleciona o teu clã aliado!", "error");
             if (pass === ALLY_PASSWORD) {
-                loginSuccess(`${nick} [${clan}]`, false, true);
+                await registerAllyNickInDatabase(nick, clanName);
+                loginSuccess(`${nick} [${clanName}]`, false, true);
             } else {
                 window.notify("Senha da aliança incorreta!", "error");
             }
         };
+
+        async function registerAllyNickInDatabase(nick, clanName) {
+            let allyDoc = allAlliances.find(a => a.name === clanName);
+            if (allyDoc) {
+                const members = allyDoc.members || [];
+                if (!members.includes(nick)) {
+                    const newMembers = [...members, nick];
+                    try {
+                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allyDoc.id), {
+                            members: newMembers
+                        });
+                    } catch(e) { console.error("Erro ao registrar nick", e); }
+                }
+            } else {
+                const tag = clanName === "C0RV0S" ? "CR0W" : clanName === "Tenebris" ? "TNB" : "ALLY";
+                try {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), {
+                        name: clanName,
+                        tag: tag,
+                        members: [nick],
+                        createdAt: Date.now()
+                    });
+                } catch(e) { console.error("Erro ao criar clã aliado", e); }
+            }
+        }
 
         function loginSuccess(name, isAdmin, isAlly) {
             currentUser = { name, isAdmin, isAlly };
@@ -277,7 +325,12 @@
             const tag = document.getElementById('ali-tag').value.trim();
             if (!name || !tag) return window.notify("Nome e Sigla obrigatórios!", "error");
             try {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, createdAt: Date.now() });
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { 
+                    name, 
+                    tag, 
+                    members: [], 
+                    createdAt: Date.now() 
+                });
                 window.notify("Aliança adicionada!", "success");
                 window.closeModal('modal-admin-alliance');
             } catch (e) { window.notify("Erro ao salvar.", "error"); }
@@ -298,16 +351,29 @@
             } catch (e) { window.notify("Erro ao apagar!", "error"); }
         };
 
+        window.removeAllyMember = async (allianceId, nick) => {
+            if (!currentUser || !currentUser.isAdmin) return;
+            const ally = allAlliances.find(a => a.id === allianceId);
+            if (!ally) return;
+            const updatedMembers = ally.members.filter(m => m !== nick);
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceId), {
+                    members: updatedMembers
+                });
+                window.notify(`Membro ${nick} removido!`, "success");
+            } catch(e) { window.notify("Erro ao remover membro.", "error"); }
+        };
+
         // --- RENDERIZAÇÃO ---
 
         function populateAllySelect() {
             const select = document.getElementById('login-ally-clan');
             if(!select) return;
+            const baseClans = ["C0RV0S", "Tenebris"];
             let options = '<option value="">Selecionar o clã</option>';
-            options += '<option value="C0RV0S">C0RV0S (CR0W)</option>';
-            options += '<option value="Tenebris">Tenebris (TNB)</option>';
+            baseClans.forEach(c => { options += `<option value="${c}">${c}</option>`; });
             allAlliances.forEach(ali => {
-                if(ali.tag !== 'CR0W' && ali.tag !== 'TNB') {
+                if(!baseClans.includes(ali.name)) {
                     options += `<option value="${ali.name}">${ali.name} (${ali.tag})</option>`;
                 }
             });
@@ -318,26 +384,41 @@
             const container = document.getElementById('alliances-list');
             if (!container) return;
             container.innerHTML = '';
-            let defaultContent = `
-                <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between">
-                    <div><h4 class="text-xl font-bold text-slate-800">C0RV0S</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">CR0W</span></div>
-                    <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
-                </div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between">
-                    <div><h4 class="text-xl font-bold text-slate-800">Tenebris</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">TNB</span></div>
-                    <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
-                </div>
-            `;
             if (allAlliances.length === 0) {
-                container.innerHTML = defaultContent;
+                container.innerHTML = `
+                    <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between">
+                        <div><h4 class="text-xl font-bold text-slate-800">C0RV0S</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">CR0W</span></div>
+                        <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
+                    </div>
+                    <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between">
+                        <div><h4 class="text-xl font-bold text-slate-800">Tenebris</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">TNB</span></div>
+                        <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
+                    </div>
+                `;
             } else {
                 allAlliances.forEach(ali => {
+                    const membersHtml = (ali.members && ali.members.length > 0) 
+                        ? `<div class="mt-4 flex flex-wrap gap-2">
+                            ${ali.members.map(m => `
+                                <span class="bg-slate-50 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold border flex items-center gap-2">
+                                    ${m}
+                                    ${currentUser?.isAdmin ? `<button onclick="window.removeAllyMember('${ali.id}', '${m}')" class="text-red-400 hover:text-red-600"><i data-lucide="x" class="w-3 h-3"></i></button>` : ''}
+                                </span>`).join('')}
+                           </div>` 
+                        : `<p class="text-[10px] text-slate-300 mt-2 italic">Nenhum nick registrado ainda</p>`;
+
                     container.innerHTML += `
-                        <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between group">
-                            <div><h4 class="text-xl font-bold text-slate-800">${ali.name}</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">${ali.tag}</span></div>
-                            <div class="flex items-center gap-3">
-                                ${currentUser && currentUser.isAdmin ? `<button onclick="window.requestDeleteAlliance('${ali.id}')" class="p-2 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
-                                <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
+                        <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col group transition-all hover:scale-[1.02]">
+                            <div class="flex items-center justify-between">
+                                <div><h4 class="text-xl font-bold text-slate-800">${ali.name}</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">${ali.tag}</span></div>
+                                <div class="flex items-center gap-3">
+                                    ${currentUser && currentUser.isAdmin ? `<button onclick="window.requestDeleteAlliance('${ali.id}')" class="p-2 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
+                                    <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
+                                </div>
+                            </div>
+                            <div class="mt-4 border-t pt-2">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Membros Conectados:</span>
+                                ${membersHtml}
                             </div>
                         </div>
                     `;
@@ -354,35 +435,18 @@
             const suggSection = document.getElementById('suggestions-section');
             const noAct = document.getElementById('no-active-message');
             const adminPanel = document.getElementById('admin-event-panel');
-            
             const actives = allEvents.filter(e => e.status === 'active');
             const history = allEvents.filter(e => e.status === 'ended');
             const suggestions = allEvents.filter(e => e.status === 'suggestion');
-            
             if(actContainer) actContainer.innerHTML = ''; 
             if(histContainer) histContainer.innerHTML = ''; 
             if(suggContainer) suggContainer.innerHTML = '';
-
-            if (currentUser && !currentUser.isAlly) {
-                adminPanel?.classList.remove('hidden');
-            } else {
-                adminPanel?.classList.add('hidden');
-            }
-            
+            if (currentUser && !currentUser.isAlly) adminPanel?.classList.remove('hidden'); else adminPanel?.classList.add('hidden');
             if (currentUser && currentUser.isAdmin && suggestions.length > 0) {
                 if(suggSection) suggSection.classList.remove('hidden');
                 suggestions.forEach(ev => suggContainer.innerHTML += createEventCard(ev, 'suggestion'));
-            } else if (suggSection) {
-                suggSection.classList.add('hidden');
-            }
-
-            if (actives.length === 0) {
-                if(noAct) noAct.classList.remove('hidden');
-            } else {
-                if(noAct) noAct.classList.add('hidden');
-                actives.forEach(ev => actContainer.innerHTML += createEventCard(ev, 'active'));
-            }
-            
+            } else if (suggSection) suggSection.classList.add('hidden');
+            if (actives.length === 0) { if(noAct) noAct.classList.remove('hidden'); } else { if(noAct) noAct.classList.add('hidden'); actives.forEach(ev => actContainer.innerHTML += createEventCard(ev, 'active')); }
             history.forEach(ev => histContainer.innerHTML += createEventCard(ev, 'history'));
             lucide.createIcons();
         }
@@ -393,7 +457,6 @@
             const creditText = (ev.suggestedBy && ev.suggestedBy !== ADMIN_NAME) 
                 ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` 
                 : '';
-
             const participantsList = `
                 <div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2">
                     <span class="text-slate-400 font-bold uppercase text-xs">Participantes Inscritos (${ev.participants.length}):</span>
@@ -402,30 +465,23 @@
                     </div>
                 </div>
             `;
-
             if (currentUser && currentUser.isAdmin) {
                 if (type === 'suggestion') {
-                    controls = `
-                        <div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
-                            <button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold hover:bg-green-600 transition flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Aprovar</button>
-                            <button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold hover:bg-pink-200 transition">Editar</button>
-                            <button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Rejeitar</button>
-                        </div>
-                    `;
+                    controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
+                        <button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold hover:bg-green-600 transition flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Aprovar</button>
+                        <button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold hover:bg-pink-200 transition">Editar</button>
+                        <button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Rejeitar</button>
+                    </div>`;
                 } else {
-                    controls = `
-                        <div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
-                            <button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold flex items-center gap-1 hover:bg-pink-200 transition"><i data-lucide="edit-3" class="w-3 h-3"></i> Editar</button>
-                            <button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg hover:bg-black transition font-bold">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button>
-                            <button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Excluir</button>
-                        </div>
-                        ${participantsList}
-                    `;
+                    controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
+                        <button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold flex items-center gap-1 hover:bg-pink-200 transition"><i data-lucide="edit-3" class="w-3 h-3"></i> Editar</button>
+                        <button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg hover:bg-black transition font-bold">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button>
+                        <button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Excluir</button>
+                    </div>${participantsList}`;
                 }
             } else if (currentUser && (type === 'active' || type === 'history')) {
                 controls = participantsList;
             }
-
             return `
                 <div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]">
                     <div class="flex justify-between items-start mb-1">
@@ -453,8 +509,7 @@
                             ${isParticipating ? 'Cancelar Participação' : 'Quero Participar'}
                         </button>` : ''}
                     ${controls}
-                </div>
-            `;
+                </div>`;
         }
 
         function updateUI() {
@@ -477,14 +532,8 @@
         }
 
         function listenToData() {
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (snap) => {
-                allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderEvents();
-            });
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (snap) => {
-                allAlliances = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-                renderAlliances();
-            });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (snap) => { allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderEvents(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (snap) => { allAlliances = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderAlliances(); });
         }
 
         onAuthStateChanged(auth, async (user) => {
@@ -568,26 +617,37 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="1gcy.png" onerror="this.src='https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 05/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">build</span></div></div>
                 <!-- Pardas01 -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" alt="Pardas01" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 16/06</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- + 12 Membros (Baiano, Raitzz, Invisivel, etc...) -->
+                <!-- baiano019 -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 14/05</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <!-- Raitzz_ -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Manhã</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
+                <!-- Invisivel -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 28/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <!-- NeverPuzzle -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 11/08</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
+                <!-- chorapropai -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/01</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Variável</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
+                <!-- felpipoca -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 21/01</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia e Madrugada</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
+                <!-- 1aswd -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 19/09</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia todo</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <!-- ynSunn -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 23/08</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
+                <!-- labubusista -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/02</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Quase sempre</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <!-- TheP1nk -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full shadow-sm font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <!-- 2aswd -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 20/05</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 02h-21h</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <!-- _Vzkls14 -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 02h-21h</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full shadow-sm">builder</span></div></div>
             </div>
         </div>
 
         <div id="tab-eventos" class="hidden">
             <div class="bg-pink-50 border-2 border-pink-100 p-6 rounded-3xl mb-8 text-sm text-pink-700 max-w-4xl mx-auto flex items-start gap-4">
                 <i data-lucide="info" class="w-6 h-6 mt-1 flex-shrink-0"></i>
-                <p><strong>Instrução:</strong> Você pode criar ou sugerir eventos para o clã. Caso não tenha certeza sobre algum detalhe como prêmio, local ou horário, pode deixar o campo em branco. A Luhnny revisará tudo antes de aprovar!</p>
+                <p><strong>Instrução:</strong> Você pode criar ou sugerir eventos para o clã. A Luhnny revisará tudo antes de aprovar!</p>
             </div>
             <div id="suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2"><i data-lucide="message-square"></i> Sugestões Pendentes</h3><div id="suggested-events-list"></div></div>
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
@@ -610,7 +670,7 @@
 
     <footer class="py-10 text-center text-pink-400 text-sm opacity-70"><p>Clã AFK fundado em 2025 por Luhnny</p></footer>
 
-    <!-- MODAL LOGIN -->
+    <!-- MODAIS E LOGINS MANTIDOS -->
     <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-center">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
             <div class="flex border-b mb-6">
@@ -632,7 +692,6 @@
         </div>
     </div>
 
-    <!-- MODAIS DE CONFIRMAÇÃO -->
     <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
             <h3 class="text-xl font-bold text-slate-800 mb-6">Eliminar Evento?</h3>
@@ -647,7 +706,6 @@
         </div>
     </div>
 
-    <!-- MODAL ADMIN EVENTO -->
     <div id="modal-admin-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 id="modal-admin-title" class="text-2xl font-bold text-pink-600 mb-6">Criar Evento</h3>
@@ -668,7 +726,6 @@
         </div>
     </div>
 
-    <!-- MODAL ADMIN ALIANÇA -->
     <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
             <h3 class="text-2xl font-bold text-pink-600 mb-6">Nova Aliança</h3>
