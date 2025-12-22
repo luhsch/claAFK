@@ -55,10 +55,8 @@
         let applicationToDeleteId = null;
         
         const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
-        const CLAN_PASSWORD = "senhadificil"; 
-        const ADMIN_PASSWORD = "sp3k22m31"; 
-        const SUB_ADMIN_PASSWORD = "senhamegadificil"; 
-        const ALLY_PASSWORD = "123alianca";
+        const INVITE_CODE_MEMBER = "senhadificil"; 
+        const INVITE_CODE_ALLY = "123alianca";
 
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
@@ -80,66 +78,168 @@
         window.openModal = (id) => { document.getElementById(id)?.classList.remove('hidden'); };
         window.closeModal = (id) => { document.getElementById(id)?.classList.add('hidden'); };
 
-        window.loginSuccess = (name, isAdmin, isAlly) => {
-            currentUser = { name, isAdmin, isAlly };
+        window.loginSuccess = (userDoc) => {
+            currentUser = userDoc;
             localStorage.setItem('afk_user', JSON.stringify(currentUser));
             window.updateUI();
-            window.notify(`Olá, ${name}!`, "success");
+            window.notify(`Olá, ${currentUser.name}!`, "success");
             window.closeModal('modal-login');
         };
 
-        window.registerAllyNick = async (nick, clan) => {
-            let docAlly = allAlliances.find(a => a.name === clan);
-            if (docAlly) {
-                if (!(docAlly.members || []).includes(nick)) {
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', docAlly.id), { members: [...(docAlly.members || []), nick] });
-                }
+        // --- SISTEMA DE AUTENTICAÇÃO (NOVO) ---
+
+        window.toggleAuthMode = (mode) => {
+            const loginForm = document.getElementById('auth-login-form');
+            const registerForm = document.getElementById('auth-register-form');
+            const tabLogin = document.getElementById('tab-mode-login');
+            const tabRegister = document.getElementById('tab-mode-register');
+
+            if (mode === 'login') {
+                loginForm.classList.remove('hidden');
+                registerForm.classList.add('hidden');
+                tabLogin.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
+                tabLogin.classList.remove('text-slate-400');
+                tabRegister.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
+                tabRegister.classList.add('text-slate-400');
             } else {
-                const tag = clan === "C0RV0S" ? "CR0W" : clan === "Tenebris" ? "TNB" : "ALLY";
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: clan, tag, members: [nick], createdAt: Date.now() });
+                loginForm.classList.add('hidden');
+                registerForm.classList.remove('hidden');
+                tabRegister.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
+                tabRegister.classList.remove('text-slate-400');
+                tabLogin.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
+                tabLogin.classList.add('text-slate-400');
+                window.populateAllySelectRegister();
             }
         };
 
-        window.handleLoginAFK = () => {
-            const nick = document.getElementById('login-afk-user').value.trim();
-            const pass = document.getElementById('login-afk-pass').value;
-            if (!nick) return window.notify("Digita o teu nick!", "error");
-            if (nick.toLowerCase() === "luhnny" && pass === ADMIN_PASSWORD) return window.loginSuccess("Luhnny", true, false);
-            if ((nick.toLowerCase() === "lagartuuuxaaa" || nick.toLowerCase() === "k0ssh1_") && pass === SUB_ADMIN_PASSWORD) {
-                return window.loginSuccess(nick.toLowerCase() === "lagartuuuxaaa" ? "Lagartuuuxaaa" : "K0ssh1_", true, false);
+        window.toggleRegisterType = () => {
+            const type = document.getElementById('reg-type').value;
+            const clanDiv = document.getElementById('reg-clan-div');
+            const inviteLabel = document.getElementById('reg-invite-label');
+            
+            if (type === 'ally') {
+                clanDiv.classList.remove('hidden');
+                inviteLabel.innerText = "Código de Aliado:";
+            } else {
+                clanDiv.classList.add('hidden');
+                inviteLabel.innerText = "Código de Membro:";
             }
-            if (ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase()) && pass === CLAN_PASSWORD) {
-                return window.loginSuccess(ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase()), false, false);
-            }
-            window.notify("Dados incorretos!", "error");
         };
 
-        window.handleLoginAlly = async () => {
-            const nick = document.getElementById('login-ally-user').value.trim();
-            const pass = document.getElementById('login-ally-pass').value;
-            const clan = document.getElementById('login-ally-clan').value;
-            if (!nick || !clan) return window.notify("Preenche os dados!", "error");
-            if (pass === ALLY_PASSWORD) {
-                const user = auth.currentUser;
-                if (!user) return;
-                const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', nick.toLowerCase());
-                const identitySnap = await getDoc(identityRef);
-                if (identitySnap.exists()) {
-                    if (identitySnap.data().deviceId !== user.uid) {
-                        return window.notify("Nick vinculado a outro computador!", "error");
-                    }
+        window.handleLogin = async () => {
+            const nick = document.getElementById('login-user').value.trim();
+            const pass = document.getElementById('login-pass').value;
+
+            if (!nick || !pass) return window.notify("Preencha todos os campos.", "error");
+
+            try {
+                // Busca o usuário no banco de dados
+                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nick.toLowerCase());
+                const userSnap = await getDoc(userRef);
+
+                if (!userSnap.exists()) {
+                    return window.notify("Usuário não encontrado. Crie uma conta.", "error");
+                }
+
+                const userData = userSnap.data();
+                if (userData.password !== pass) {
+                    return window.notify("Senha incorreta.", "error");
+                }
+
+                // Login bem sucedido
+                const isAdmin = ADMINS_LIST.includes(userData.name);
+                const isAlly = userData.role === 'ally';
+                
+                // Atualiza último login
+                await updateDoc(userRef, { lastLogin: Date.now() });
+
+                // Identidade Ally (Lógica antiga mantida para compatibilidade)
+                if (isAlly) {
+                    const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase());
+                    await setDoc(identityRef, { nick: userData.name, deviceId: "auth_v2", createdAt: Date.now() });
                 } else {
-                    await setDoc(identityRef, { deviceId: user.uid, nick: nick, createdAt: Date.now() });
+                    // Se for membro, verifica se existe identidade e salva também para o painel
+                    const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase()); 
+                    await setDoc(identityRef, { nick: userData.name, role: 'member', createdAt: Date.now() });
                 }
-                await window.registerAllyNick(nick, clan); 
-                window.loginSuccess(`${nick} [${clan}]`, false, true); 
-            } else {
-                window.notify("Senha incorreta!", "error");
+
+                window.loginSuccess({ ...userData, isAdmin, isAlly });
+
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao fazer login.", "error");
             }
         };
+
+        window.handleRegister = async () => {
+            const nick = document.getElementById('reg-nick').value.trim();
+            const pass = document.getElementById('reg-pass').value;
+            const type = document.getElementById('reg-type').value; // 'member' or 'ally'
+            const clan = document.getElementById('reg-clan').value;
+            const inviteCode = document.getElementById('reg-invite').value;
+
+            if (!nick || !pass || !inviteCode) return window.notify("Preencha todos os campos.", "error");
+            if (type === 'ally' && !clan) return window.notify("Selecione um clã.", "error");
+
+            // Validação do Código de Convite
+            if (type === 'member' && inviteCode !== INVITE_CODE_MEMBER) return window.notify("Código de Membro incorreto.", "error");
+            if (type === 'ally' && inviteCode !== INVITE_CODE_ALLY) return window.notify("Código de Aliado incorreto.", "error");
+
+            // Validação de Membros Permitidos
+            if (type === 'member') {
+                const isAllowed = ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase());
+                if (!isAllowed) return window.notify("Este Nick não está na lista de membros permitidos.", "error");
+            }
+
+            try {
+                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nick.toLowerCase());
+                const userSnap = await getDoc(userRef);
+
+                if (userSnap.exists()) {
+                    return window.notify("Este usuário já está registrado. Faça login.", "error");
+                }
+
+                const userData = {
+                    name: ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase()) || nick, // Formata o nick se for membro
+                    password: pass,
+                    role: type,
+                    clan: type === 'ally' ? clan : 'AFK',
+                    createdAt: Date.now()
+                };
+
+                await setDoc(userRef, userData);
+
+                // Se for aliado, adiciona na lista de alianças se não estiver
+                if (type === 'ally') {
+                    let docAlly = allAlliances.find(a => a.name === clan);
+                    if (docAlly) {
+                        if (!(docAlly.members || []).includes(nick)) {
+                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', docAlly.id), { members: [...(docAlly.members || []), nick] });
+                        }
+                    } else {
+                        // Cria clã se não existir (auto-registro)
+                        const tag = clan.substring(0, 4).toUpperCase();
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: clan, tag, members: [nick], createdAt: Date.now() });
+                    }
+                }
+
+                window.notify("Conta criada com sucesso! Fazendo login...", "success");
+                
+                // Auto-login
+                const isAdmin = ADMINS_LIST.includes(userData.name);
+                const isAlly = type === 'ally';
+                window.loginSuccess({ ...userData, isAdmin, isAlly });
+
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao registrar.", "error");
+            }
+        };
+
+        // --- INTERFACE E NAVEGAÇÃO ---
 
         window.switchTab = (tab) => {
-            ['apresentacao', 'membros', 'eventos', 'aliancas', 'recrutamento'].forEach(t => {
+            ['apresentacao', 'membros', 'eventos', 'aliancas', 'recrutamento', 'contas'].forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('btn-' + t);
                 if (!el || !btn) return;
@@ -147,21 +247,6 @@
                 else { el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('text-pink-300'); }
             });
             lucide.createIcons();
-        };
-
-        window.switchLoginTab = (type) => {
-            const afkS = document.getElementById('login-afk-section');
-            const allyS = document.getElementById('login-ally-section');
-            const afkB = document.getElementById('tab-login-afk');
-            const allyB = document.getElementById('tab-login-ally');
-            if (type === 'afk') {
-                afkS?.classList.remove('hidden'); allyS?.classList.add('hidden');
-                afkB?.classList.add('login-tab-active'); allyB?.classList.remove('login-tab-active');
-            } else {
-                afkS?.classList.add('hidden'); allyS?.classList.remove('hidden');
-                afkB?.classList.remove('login-tab-active'); allyB?.classList.add('login-tab-active');
-                window.populateAllySelect();
-            }
         };
 
         // --- GESTÃO DE EVENTOS ---
@@ -343,8 +428,11 @@
             const memIdenL = document.getElementById('member-identities-list');
 
             if (isAdmin) {
-                const members = allIdentities.filter(i => ALLOWED_MEMBERS.some(m => m.toLowerCase() === i.nick.toLowerCase()));
-                const allies = allIdentities.filter(i => !ALLOWED_MEMBERS.some(m => m.toLowerCase() === i.nick.toLowerCase()));
+                // Filtra identidades baseada na role salva no banco OU se está na lista de membros permitidos
+                // Role 'member' ou nick na lista ALLOWED_MEMBERS = Membro
+                const members = allIdentities.filter(i => i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === i.nick.toLowerCase()));
+                // O resto é aliado
+                const allies = allIdentities.filter(i => !members.includes(i));
 
                 if (allyIdenC && allyIdenL) {
                     allyIdenC.classList.remove('hidden');
@@ -514,8 +602,8 @@
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
         });
 
-        window.populateAllySelect = () => {
-            const s = document.getElementById('login-ally-clan'); if(!s) return;
+        window.populateAllySelectRegister = () => {
+            const s = document.getElementById('reg-clan'); if(!s) return;
             let h = '<option value="">Selecionar clã</option><option value="C0RV0S">C0RV0S</option><option value="Tenebris">Tenebris</option>';
             allAlliances.forEach(a => { if(a.name!=="C0RV0S" && a.name!=="Tenebris") h += `<option value="${a.name}">${a.name}</option>`; });
             s.innerHTML = h;
@@ -562,7 +650,7 @@
         <!-- APRESENTAÇÃO -->
         <div id="tab-apresentacao">
             <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed">
-                <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
+                <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icon.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
                 <h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2>
                 <div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8">
                     <p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p>
@@ -591,44 +679,44 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
                 <!-- Luhnny -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform">
-                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3><img src="https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div>
+                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3><img src="luhnny.png" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div>
                     <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 17/10</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: Manhã e Noite</div></div>
                     <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">Líder</span><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div>
                 </div>
                 <!-- K0ssh1_ -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 27/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 13:30 - 01:30</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 27/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 13:30 - 01:30</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
                 <!-- Lagartuuuxaaa -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 01/07</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 22h - 02h</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="lagartuuuxaaa.png" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 01/07</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 22h - 02h</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
                 <!-- iaruchy -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 18/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: Toda hora</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><img src="iaruchy.png" onerror="this.src='https://ui-avatars.com/api/?name=iaruchy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 18/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: Toda hora</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
                 <!-- 1gcy -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 05/04</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">build</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="1gcy.png" onerror="this.src='https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 05/04</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">build</span></div></div>
                 <!-- Pardas01 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 16/06</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 16/06</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- baiano019 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 14/05</div><div>Disponível: Noite</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><img src="baiano019.png" onerror="this.src='https://ui-avatars.com/api/?name=baiano019&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 14/05</div><div>Disponível: Noite</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
                 <!-- Raitzz_ -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: Tarde e Manhã</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><img src="raitzz_.png" onerror="this.src='https://ui-avatars.com/api/?name=Raitzz_&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: Tarde e Manhã</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- Invisivel -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 28/07</div><div>Disponível: Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 28/07</div><div>Disponível: Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- NeverPuzzle -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 11/08</div><div>Disponível: Tarde</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><img src="neverpuzzle.png" onerror="this.src='https://ui-avatars.com/api/?name=NeverPuzzle&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 11/08</div><div>Disponível: Tarde</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- chorapropai -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/01</div><div>Disponível: Variável</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/01</div><div>Disponível: Variável</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- felpipoca -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 21/01</div><div>Disponível: Dia e Madrugada</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><img src="felpipoca.png" onerror="this.src='https://ui-avatars.com/api/?name=felpipoca&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 21/01</div><div>Disponível: Dia e Madrugada</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- 1aswd -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 19/09</div><div>Disponível: Dia todo</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><img src="1aswd.png" onerror="this.src='https://ui-avatars.com/api/?name=1aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 19/09</div><div>Disponível: Dia todo</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
                 <!-- ynSunn -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 23/08</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 23/08</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- labubusista -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 17/02</div><div>Disponível: Quase sempre</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 17/02</div><div>Disponível: Quase sempre</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
                 <!-- TheP1nk -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/07</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/07</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
                 <!-- 2aswd -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 20/05</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2aswd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 20/05</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
                 <!-- _Vzkls14 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="https://ui-avatars.com/api/?name=_Vzkls14&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: 02h-21h</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=_Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: 02h-21h</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
             </div>
         </div>
 
@@ -716,29 +804,49 @@
 
     <footer class="py-10 text-center text-pink-400 text-sm opacity-70 uppercase tracking-tighter font-semibold">Clã AFK fundado em 2025 por Luhnny</footer>
 
-    <!-- MODAIS -->
+    <!-- MODAL DE LOGIN / REGISTRO -->
     <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden text-center">
+            
             <div class="flex border-b mb-6">
-                <button id="tab-login-afk" onclick="window.switchLoginTab('afk')" class="flex-1 py-4 text-base font-bold login-tab-active uppercase tracking-tighter transition-all">Clã AFK</button>
-                <button id="tab-login-ally" onclick="window.switchLoginTab('ally')" class="flex-1 py-4 text-base font-bold text-slate-400 uppercase tracking-tighter transition-all">Aliança</button>
+                <button id="tab-mode-login" onclick="window.toggleAuthMode('login')" class="flex-1 py-4 text-base font-bold text-pink-600 border-b-2 border-pink-600 uppercase tracking-tighter transition-all">Entrar</button>
+                <button id="tab-mode-register" onclick="window.toggleAuthMode('register')" class="flex-1 py-4 text-base font-bold text-slate-400 uppercase tracking-tighter transition-all">Criar Conta</button>
             </div>
-            <div id="login-afk-section" class="space-y-4 text-left">
+
+            <!-- LOGIN -->
+            <div id="auth-login-form" class="space-y-4 text-left">
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
-                <input type="text" id="login-afk-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
-                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Senha:</label>
-                <input type="password" id="login-afk-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
-                <button onclick="window.handleLoginAFK()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Acessar</button>
+                <input type="text" id="login-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Sua Senha:</label>
+                <input type="password" id="login-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <button onclick="window.handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Acessar</button>
             </div>
-            <div id="login-ally-section" class="hidden space-y-4 text-left">
+
+            <!-- REGISTRO -->
+            <div id="auth-register-form" class="hidden space-y-4 text-left">
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
-                <input type="text" id="login-ally-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
-                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Senha Aliança:</label>
-                <input type="password" id="login-ally-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
-                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Seu Clã:</label>
-                <select id="login-ally-clan" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 transition-all"></select>
-                <button onclick="window.handleLoginAlly()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Entrar como Aliado</button>
+                <input type="text" id="reg-nick" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Crie uma Senha:</label>
+                <input type="password" id="reg-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Tipo de Conta:</label>
+                <select id="reg-type" onchange="window.toggleRegisterType()" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                    <option value="member">Membro do Clã</option>
+                    <option value="ally">Aliado</option>
+                </select>
+
+                <div id="reg-clan-div" class="hidden">
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Selecione seu Clã:</label>
+                    <select id="reg-clan" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"></select>
+                </div>
+
+                <label id="reg-invite-label" class="block text-sm font-bold text-pink-500 uppercase mb-1 ml-2">Código de Acesso:</label>
+                <input type="password" id="reg-invite" class="w-full bg-pink-50 border-2 border-pink-200 p-3 rounded-xl outline-none focus:border-pink-400 text-pink-600 font-bold placeholder-pink-300" placeholder="Digite o código...">
+
+                <button onclick="window.handleRegister()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Registrar</button>
             </div>
+
             <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-6 uppercase font-semibold text-center hover:text-pink-400 transition-colors">Fechar janela</button>
         </div>
     </div>
