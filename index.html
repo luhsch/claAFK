@@ -12,6 +12,7 @@
         .pink-gradient { background: linear-gradient(135deg, #fbcfe8 0%, #f9a8d4 100%); }
         .card-shadow { box-shadow: 0 10px 25px -5px rgba(244, 114, 182, 0.1), 0 8px 10px -6px rgba(244, 114, 182, 0.1); }
         .tab-active { color: #db2777; border-bottom: 3px solid #db2777; }
+        .login-tab-active { border-bottom: 2px solid #db2777; color: #db2777; font-weight: 700; }
         .hidden { display: none; }
         @keyframes subtle-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.9; } }
         @keyframes attention-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); transform: scale(1); } 50% { transform: scale(1.05); } 70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); transform: scale(1); } }
@@ -46,12 +47,14 @@
         let allAllianceRequests = [];
         let allApplications = [];
         let allIdentities = [];
+        let allMissions = [];
         let isRecruitmentOpen = true; 
         
         let editingEventId = null;
         let eventToDeleteId = null;
         let allianceToDeleteId = null;
         let applicationToDeleteId = null;
+        let missionToDeleteId = null;
         
         const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
         const INVITE_CODE_MEMBER = "senhadificil"; 
@@ -93,48 +96,34 @@
 
         // --- SISTEMA DE NAVEGAÇÃO POR TECLADO ---
         window.handleKeyNav = (event, nextId, prevId, action) => {
-            // Verifica se o elemento alvo está visível (para pular campos ocultos)
             const isVisible = (id) => {
                 const el = document.getElementById(id);
                 return el && el.offsetParent !== null;
             };
-
-            // Lógica de Pulo Automático se o próximo/anterior estiver oculto
             let targetId = null;
 
             if (event.key === "ArrowDown") {
                 event.preventDefault();
                 targetId = nextId;
-                // Se o alvo for 'reg-clan' mas ele estiver oculto (pois type != ally), pule para 'reg-invite'
-                if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) {
-                    targetId = 'reg-invite';
-                }
+                if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) targetId = 'reg-invite';
                 document.getElementById(targetId)?.focus();
-
             } else if (event.key === "ArrowUp") {
                 event.preventDefault();
                 targetId = prevId;
-                // Se o alvo for 'reg-clan' mas ele estiver oculto, pule para 'reg-type'
-                if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) {
-                    targetId = 'reg-type';
-                }
+                if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) targetId = 'reg-type';
                 document.getElementById(targetId)?.focus();
-
             } else if (event.key === "Enter") {
                 event.preventDefault();
-                if (action) {
-                    action(); // Executa Login ou Registro
-                } else if (nextId) {
+                if (action) action(); 
+                else if (nextId) {
                     targetId = nextId;
-                    if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) {
-                        targetId = 'reg-invite';
-                    }
+                    if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) targetId = 'reg-invite';
                     document.getElementById(targetId)?.focus();
                 }
             }
         };
 
-        // --- SISTEMA DE AUTENTICAÇÃO (NOVO) ---
+        // --- SISTEMA DE AUTENTICAÇÃO ---
 
         window.toggleAuthMode = (mode) => {
             const loginForm = document.getElementById('auth-login-form');
@@ -165,15 +154,9 @@
         window.toggleRegisterType = () => {
             const type = document.getElementById('reg-type').value;
             const clanDiv = document.getElementById('reg-clan-div');
-            const inviteLabel = document.getElementById('reg-invite-label');
             
-            if (type === 'ally') {
-                clanDiv.classList.remove('hidden');
-                inviteLabel.innerText = "Código de Aliado:"; // Código oculto na label
-            } else {
-                clanDiv.classList.add('hidden');
-                inviteLabel.innerText = "Código de Membro:"; // Código oculto na label
-            }
+            if (type === 'ally') clanDiv.classList.remove('hidden');
+            else clanDiv.classList.add('hidden');
         };
 
         window.handleLogin = async () => {
@@ -183,20 +166,14 @@
             if (!nick || !pass) return window.notify("Preencha todos os campos.", "error");
 
             try {
-                // Busca o usuário no banco de dados
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nick.toLowerCase());
                 const userSnap = await getDoc(userRef);
 
-                if (!userSnap.exists()) {
-                    return window.notify("Usuário não encontrado. Crie uma conta.", "error");
-                }
+                if (!userSnap.exists()) return window.notify("Usuário não encontrado. Crie uma conta.", "error");
 
                 const userData = userSnap.data();
-                if (userData.password !== pass) {
-                    return window.notify("Senha incorreta.", "error");
-                }
+                if (userData.password !== pass) return window.notify("Senha incorreta.", "error");
 
-                // Login bem sucedido
                 const isAdmin = ADMINS_LIST.includes(userData.name);
                 const isAlly = userData.role === 'ally';
                 
@@ -240,9 +217,7 @@
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nick.toLowerCase());
                 const userSnap = await getDoc(userRef);
 
-                if (userSnap.exists()) {
-                    return window.notify("Este usuário já está registrado. Faça login.", "error");
-                }
+                if (userSnap.exists()) return window.notify("Este usuário já está registrado. Faça login.", "error");
 
                 const userData = {
                     name: ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase()) || nick, 
@@ -281,12 +256,90 @@
         // --- INTERFACE E NAVEGAÇÃO ---
 
         window.switchTab = (tab) => {
-            ['apresentacao', 'membros', 'eventos', 'aliancas', 'recrutamento', 'contas'].forEach(t => {
+            ['apresentacao', 'membros', 'eventos', 'aliancas', 'recrutamento', 'contas', 'missoes'].forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('btn-' + t);
                 if (!el || !btn) return;
                 if (t === tab) { el.classList.remove('hidden'); btn.classList.add('tab-active'); btn.classList.remove('text-pink-300'); } 
                 else { el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('text-pink-300'); }
+            });
+            lucide.createIcons();
+        };
+
+        // --- SISTEMA DE MISSÕES ---
+        window.createMission = async () => {
+            const objective = document.getElementById('mis-objective').value.trim();
+            const reward = document.getElementById('mis-reward').value.trim();
+            if (!objective || !reward) return window.notify("Preencha todos os campos da missão.", "error");
+
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), {
+                objective,
+                reward,
+                status: 'open',
+                takenBy: null,
+                createdAt: Date.now()
+            });
+            window.notify("Missão criada!", "success");
+            window.closeModal('modal-create-mission');
+            document.getElementById('form-create-mission').reset();
+        };
+
+        window.takeMission = async (id) => {
+            if (!currentUser) return;
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', id), {
+                status: 'taken',
+                takenBy: currentUser.name
+            });
+            window.notify("Você aceitou a missão!", "success");
+        };
+
+        window.requestDeleteMission = (id) => {
+            missionToDeleteId = id;
+            window.openModal('modal-confirm-mission-delete');
+        };
+
+        window.confirmMissionDelete = async () => {
+            if (missionToDeleteId) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', missionToDeleteId));
+                window.notify("Missão removida/concluída.", "success");
+                window.closeModal('modal-confirm-mission-delete');
+            }
+        };
+
+        window.renderMissions = function() {
+            const list = document.getElementById('missions-list'); if(!list) return;
+            list.innerHTML = '';
+            
+            if (allMissions.length === 0) {
+                list.innerHTML = '<div class="col-span-full text-center p-8 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400">Nenhuma missão disponível no momento.</div>';
+                return;
+            }
+
+            allMissions.sort((a,b) => b.createdAt - a.createdAt).forEach(m => {
+                const isTaken = m.status === 'taken';
+                const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+                
+                let buttonHtml = '';
+                if (isAdmin) {
+                    buttonHtml = `<button onclick="window.requestDeleteMission('${m.id}')" class="w-full mt-4 py-2 rounded-xl border-2 border-red-100 text-red-400 font-bold hover:bg-red-50 transition uppercase text-xs">Concluir / Excluir</button>`;
+                } else if (!isTaken) {
+                    buttonHtml = `<button onclick="window.takeMission('${m.id}')" class="w-full mt-4 py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl">Aceitar Missão</button>`;
+                }
+
+                let statusBadge = isTaken 
+                    ? `<span class="bg-yellow-100 text-yellow-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase flex items-center gap-1"><i data-lucide="user"></i> ${m.takenBy}</span>`
+                    : `<span class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase">Disponível</span>`;
+
+                list.innerHTML += `
+                <div class="bg-white p-6 rounded-3xl card-shadow border-2 ${isTaken ? 'border-yellow-100 opacity-90' : 'border-pink-200'} transition hover:scale-[1.01]">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="p-3 bg-pink-50 rounded-2xl text-pink-500"><i data-lucide="scroll" class="w-6 h-6"></i></div>
+                        ${statusBadge}
+                    </div>
+                    <h4 class="text-lg font-bold text-slate-700 mb-2 leading-tight">${m.objective}</h4>
+                    <p class="text-sm text-pink-500 font-semibold flex items-center gap-2 bg-pink-50/50 p-2 rounded-lg border border-pink-50"><i data-lucide="gift" class="w-4 h-4"></i> Recompensa: ${m.reward}</p>
+                    ${buttonHtml}
+                </div>`;
             });
             lucide.createIcons();
         };
@@ -561,6 +614,8 @@
             const lBtn = document.getElementById('btn-login-trigger'); 
             const uDisp = document.getElementById('user-logged-in');
             const aEventBtn = document.getElementById('admin-event-panel');
+            const aMissionBtn = document.getElementById('btn-missoes');
+            const aMissionAdmin = document.getElementById('admin-mission-controls');
             const recToggle = document.getElementById('luhnny-recruitment-toggle');
             const recFormS = document.getElementById('recruitment-form-section');
             const recClosedM = document.getElementById('recruitment-closed-message');
@@ -568,18 +623,35 @@
             if (currentUser) {
                 lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden');
                 document.getElementById('logged-name').innerText = currentUser.name;
-                isAdmin ? aRecPanel?.classList.remove('hidden') : aRecPanel?.classList.add('hidden');
-                isAdmin ? aAllyBtn?.classList.remove('hidden') : aAllyBtn?.classList.add('hidden');
-                !currentUser.isAlly ? aEventBtn?.classList.remove('hidden') : aEventBtn?.classList.add('hidden');
                 
+                // Admin Panels
                 if (isAdmin) {
-                    recToggle?.classList.remove('hidden'); recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO";
+                    aRecPanel?.classList.remove('hidden');
+                    aAllyBtn?.classList.remove('hidden');
+                    recToggle?.classList.remove('hidden');
+                    recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO";
                     recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`;
-                } else recToggle?.classList.add('hidden');
+                    aMissionAdmin?.classList.remove('hidden');
+                } else {
+                    aRecPanel?.classList.add('hidden');
+                    aAllyBtn?.classList.add('hidden');
+                    recToggle?.classList.add('hidden');
+                    aMissionAdmin?.classList.add('hidden');
+                }
+
+                // Member features (Includes Admins, Excludes Allies)
+                if (!currentUser.isAlly) {
+                    aEventBtn?.classList.remove('hidden');
+                    aMissionBtn?.classList.remove('hidden');
+                } else {
+                    aEventBtn?.classList.add('hidden');
+                    aMissionBtn?.classList.add('hidden');
+                }
 
             } else {
                 lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden');
                 aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden');
+                aMissionBtn?.classList.add('hidden');
             }
 
             if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); }
@@ -595,6 +667,7 @@
             window.renderAlliances(); 
             window.renderEvents();
             window.renderIdentities();
+            window.renderMissions();
             lucide.createIcons();
         };
 
@@ -627,6 +700,7 @@
             if (!u) await signInAnonymously(auth);
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) isRecruitmentOpen = s.data().isOpen; window.updateUI(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), (s) => { allMissions = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderMissions(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAdminApplications(); });
@@ -675,6 +749,7 @@
             <button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-sm md:text-lg font-semibold tab-active transition-all">Apresentação</button>
             <button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button>
             <button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button>
+            <button onclick="window.switchTab('missoes')" id="btn-missoes" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Missões</button>
             <button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button>
             <button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button>
         </div>
@@ -783,6 +858,16 @@
                 <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico</h3>
                 <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
             </div>
+        </div>
+
+        <!-- MISSÕES (NOVA ABA) -->
+        <div id="tab-missoes" class="hidden">
+            <div id="admin-mission-controls" class="hidden mb-8 text-center">
+                <button onclick="window.openModal('modal-create-mission')" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
+                    <i data-lucide="plus-circle"></i> Nova Missão
+                </button>
+            </div>
+            <div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
         </div>
 
         <!-- ALIANÇAS -->
@@ -926,6 +1011,25 @@
         </div>
     </div>
 
+    <!-- Modal Criar Missão -->
+    <div id="modal-create-mission" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Missão</h3>
+            <form id="form-create-mission" onsubmit="event.preventDefault(); window.createMission();" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Objetivo:</label>
+                    <input type="text" id="mis-objective" placeholder="Ex: Farmar 10k cenouras" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Recompensa:</label>
+                    <input type="text" id="mis-reward" placeholder="Ex: 100k coins" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Criar Missão</button>
+                <button type="button" onclick="window.closeModal('modal-create-mission')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Modais de Confirmação -->
     <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
@@ -948,6 +1052,8 @@
     </div>
 
     <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+    <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
 </body>
 </html>
