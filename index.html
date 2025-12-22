@@ -12,7 +12,6 @@
         .pink-gradient { background: linear-gradient(135deg, #fbcfe8 0%, #f9a8d4 100%); }
         .card-shadow { box-shadow: 0 10px 25px -5px rgba(244, 114, 182, 0.1), 0 8px 10px -6px rgba(244, 114, 182, 0.1); }
         .tab-active { color: #db2777; border-bottom: 3px solid #db2777; }
-        .login-tab-active { border-bottom: 2px solid #db2777; color: #db2777; font-weight: 700; }
         .hidden { display: none; }
         @keyframes subtle-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.9; } }
         @keyframes attention-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); transform: scale(1); } 50% { transform: scale(1.05); } 70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); transform: scale(1); } }
@@ -75,7 +74,13 @@
             setTimeout(() => { if(t) t.style.display = 'none'; }, 4000);
         };
 
-        window.openModal = (id) => { document.getElementById(id)?.classList.remove('hidden'); };
+        window.openModal = (id) => { 
+            document.getElementById(id)?.classList.remove('hidden'); 
+            // Focar no primeiro input se for o modal de login
+            if(id === 'modal-login') {
+                setTimeout(() => document.getElementById('login-user')?.focus(), 100);
+            }
+        };
         window.closeModal = (id) => { document.getElementById(id)?.classList.add('hidden'); };
 
         window.loginSuccess = (userDoc) => {
@@ -84,6 +89,49 @@
             window.updateUI();
             window.notify(`Olá, ${currentUser.name}!`, "success");
             window.closeModal('modal-login');
+        };
+
+        // --- SISTEMA DE NAVEGAÇÃO POR TECLADO ---
+        window.handleKeyNav = (event, nextId, prevId, action) => {
+            // Verifica se o elemento alvo está visível (para pular campos ocultos)
+            const isVisible = (id) => {
+                const el = document.getElementById(id);
+                return el && el.offsetParent !== null;
+            };
+
+            // Lógica de Pulo Automático se o próximo/anterior estiver oculto
+            let targetId = null;
+
+            if (event.key === "ArrowDown") {
+                event.preventDefault();
+                targetId = nextId;
+                // Se o alvo for 'reg-clan' mas ele estiver oculto (pois type != ally), pule para 'reg-invite'
+                if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) {
+                    targetId = 'reg-invite';
+                }
+                document.getElementById(targetId)?.focus();
+
+            } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                targetId = prevId;
+                // Se o alvo for 'reg-clan' mas ele estiver oculto, pule para 'reg-type'
+                if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) {
+                    targetId = 'reg-type';
+                }
+                document.getElementById(targetId)?.focus();
+
+            } else if (event.key === "Enter") {
+                event.preventDefault();
+                if (action) {
+                    action(); // Executa Login ou Registro
+                } else if (nextId) {
+                    targetId = nextId;
+                    if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) {
+                        targetId = 'reg-invite';
+                    }
+                    document.getElementById(targetId)?.focus();
+                }
+            }
         };
 
         // --- SISTEMA DE AUTENTICAÇÃO (NOVO) ---
@@ -101,6 +149,7 @@
                 tabLogin.classList.remove('text-slate-400');
                 tabRegister.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
                 tabRegister.classList.add('text-slate-400');
+                setTimeout(() => document.getElementById('login-user')?.focus(), 50);
             } else {
                 loginForm.classList.add('hidden');
                 registerForm.classList.remove('hidden');
@@ -109,6 +158,7 @@
                 tabLogin.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
                 tabLogin.classList.add('text-slate-400');
                 window.populateAllySelectRegister();
+                setTimeout(() => document.getElementById('reg-nick')?.focus(), 50);
             }
         };
 
@@ -119,10 +169,10 @@
             
             if (type === 'ally') {
                 clanDiv.classList.remove('hidden');
-                inviteLabel.innerText = "Código de Aliado:";
+                inviteLabel.innerText = "Código de Aliado:"; // Código oculto na label
             } else {
                 clanDiv.classList.add('hidden');
-                inviteLabel.innerText = "Código de Membro:";
+                inviteLabel.innerText = "Código de Membro:"; // Código oculto na label
             }
         };
 
@@ -150,15 +200,12 @@
                 const isAdmin = ADMINS_LIST.includes(userData.name);
                 const isAlly = userData.role === 'ally';
                 
-                // Atualiza último login
                 await updateDoc(userRef, { lastLogin: Date.now() });
 
-                // Identidade Ally (Lógica antiga mantida para compatibilidade)
                 if (isAlly) {
                     const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase());
                     await setDoc(identityRef, { nick: userData.name, deviceId: "auth_v2", createdAt: Date.now() });
                 } else {
-                    // Se for membro, verifica se existe identidade e salva também para o painel
                     const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase()); 
                     await setDoc(identityRef, { nick: userData.name, role: 'member', createdAt: Date.now() });
                 }
@@ -174,18 +221,16 @@
         window.handleRegister = async () => {
             const nick = document.getElementById('reg-nick').value.trim();
             const pass = document.getElementById('reg-pass').value;
-            const type = document.getElementById('reg-type').value; // 'member' or 'ally'
+            const type = document.getElementById('reg-type').value; 
             const clan = document.getElementById('reg-clan').value;
             const inviteCode = document.getElementById('reg-invite').value;
 
             if (!nick || !pass || !inviteCode) return window.notify("Preencha todos os campos.", "error");
             if (type === 'ally' && !clan) return window.notify("Selecione um clã.", "error");
 
-            // Validação do Código de Convite
             if (type === 'member' && inviteCode !== INVITE_CODE_MEMBER) return window.notify("Código de Membro incorreto.", "error");
             if (type === 'ally' && inviteCode !== INVITE_CODE_ALLY) return window.notify("Código de Aliado incorreto.", "error");
 
-            // Validação de Membros Permitidos
             if (type === 'member') {
                 const isAllowed = ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase());
                 if (!isAllowed) return window.notify("Este Nick não está na lista de membros permitidos.", "error");
@@ -200,7 +245,7 @@
                 }
 
                 const userData = {
-                    name: ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase()) || nick, // Formata o nick se for membro
+                    name: ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase()) || nick, 
                     password: pass,
                     role: type,
                     clan: type === 'ally' ? clan : 'AFK',
@@ -209,7 +254,6 @@
 
                 await setDoc(userRef, userData);
 
-                // Se for aliado, adiciona na lista de alianças se não estiver
                 if (type === 'ally') {
                     let docAlly = allAlliances.find(a => a.name === clan);
                     if (docAlly) {
@@ -217,7 +261,6 @@
                             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', docAlly.id), { members: [...(docAlly.members || []), nick] });
                         }
                     } else {
-                        // Cria clã se não existir (auto-registro)
                         const tag = clan.substring(0, 4).toUpperCase();
                         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: clan, tag, members: [nick], createdAt: Date.now() });
                     }
@@ -225,7 +268,6 @@
 
                 window.notify("Conta criada com sucesso! Fazendo login...", "success");
                 
-                // Auto-login
                 const isAdmin = ADMINS_LIST.includes(userData.name);
                 const isAlly = type === 'ally';
                 window.loginSuccess({ ...userData, isAdmin, isAlly });
@@ -418,20 +460,13 @@
 
         window.renderIdentities = function() {
             const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
-            
-            // Ally Identities Section (in Alianças tab)
             const allyIdenC = document.getElementById('ally-identities-section');
             const allyIdenL = document.getElementById('ally-identities-list');
-            
-            // Member Identities Section (in Membros tab)
             const memIdenC = document.getElementById('member-identities-section');
             const memIdenL = document.getElementById('member-identities-list');
 
             if (isAdmin) {
-                // Filtra identidades baseada na role salva no banco OU se está na lista de membros permitidos
-                // Role 'member' ou nick na lista ALLOWED_MEMBERS = Membro
                 const members = allIdentities.filter(i => i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === i.nick.toLowerCase()));
-                // O resto é aliado
                 const allies = allIdentities.filter(i => !members.includes(i));
 
                 if (allyIdenC && allyIdenL) {
@@ -816,33 +851,33 @@
             <!-- LOGIN -->
             <div id="auth-login-form" class="space-y-4 text-left">
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
-                <input type="text" id="login-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <input type="text" id="login-user" onkeydown="window.handleKeyNav(event, 'login-pass', null, null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Sua Senha:</label>
-                <input type="password" id="login-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <input type="password" id="login-pass" onkeydown="window.handleKeyNav(event, null, 'login-user', window.handleLogin)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
                 <button onclick="window.handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Acessar</button>
             </div>
 
             <!-- REGISTRO -->
             <div id="auth-register-form" class="hidden space-y-4 text-left">
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
-                <input type="text" id="reg-nick" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <input type="text" id="reg-nick" onkeydown="window.handleKeyNav(event, 'reg-pass', null, null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
                 
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Crie uma Senha:</label>
-                <input type="password" id="reg-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <input type="password" id="reg-pass" onkeydown="window.handleKeyNav(event, 'reg-type', 'reg-nick', null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
 
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Tipo de Conta:</label>
-                <select id="reg-type" onchange="window.toggleRegisterType()" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <select id="reg-type" onchange="window.toggleRegisterType()" onkeydown="window.handleKeyNav(event, 'reg-clan', 'reg-pass', null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
                     <option value="member">Membro do Clã</option>
                     <option value="ally">Aliado</option>
                 </select>
 
                 <div id="reg-clan-div" class="hidden">
                     <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Selecione seu Clã:</label>
-                    <select id="reg-clan" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"></select>
+                    <select id="reg-clan" onkeydown="window.handleKeyNav(event, 'reg-invite', 'reg-type', null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"></select>
                 </div>
 
                 <label id="reg-invite-label" class="block text-sm font-bold text-pink-500 uppercase mb-1 ml-2">Código de Acesso:</label>
-                <input type="password" id="reg-invite" class="w-full bg-pink-50 border-2 border-pink-200 p-3 rounded-xl outline-none focus:border-pink-400 text-pink-600 font-bold placeholder-pink-300" placeholder="Digite o código...">
+                <input type="password" id="reg-invite" onkeydown="window.handleKeyNav(event, null, 'reg-clan', window.handleRegister)" class="w-full bg-pink-50 border-2 border-pink-200 p-3 rounded-xl outline-none focus:border-pink-400 text-pink-600 font-bold placeholder-pink-300" placeholder="Digite o código...">
 
                 <button onclick="window.handleRegister()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Registrar</button>
             </div>
