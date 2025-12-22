@@ -23,7 +23,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc, query, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAhbf0kBYCAWsQAPKYx4TPdud1O_GUjoU4",
@@ -42,23 +42,28 @@
         let currentUser = null;
         let allEvents = [];
         let allAlliances = [];
+        let allAllianceRequests = [];
+        let allApplications = [];
+        let isRecruitmentOpen = true; 
+        
         let editingEventId = null;
         let eventToDeleteId = null;
         let allianceToDeleteId = null;
+        let applicationToDeleteId = null;
         
-        const CLAN_PASSWORD = "2v2nt4"; 
+        // --- SENHAS ---
+        const CLAN_PASSWORD = "senhadificil"; 
         const ADMIN_PASSWORD = "sp3k22m31"; 
-        const ALLY_PASSWORD = "1l31nc1";
-        const ADMIN_NAME = "Luhnny";
+        const SUB_ADMIN_PASSWORD = "senhamegadificil"; 
+        const ALLY_PASSWORD = "123alianca";
+        
+        const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
 
-        // Lista de membros permitidos (extraída da aba Membros)
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
             "baiano019", "Raitzz_", "Invisivel", "NeverPuzzle", "chorapropai", 
             "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14"
         ];
-
-        // --- REGISTO GLOBAL DE FUNÇÕES ---
 
         window.notify = (msg, type) => {
             const t = document.getElementById('toast');
@@ -69,130 +74,89 @@
             setTimeout(() => { if(t) t.style.display = 'none'; }, 4000);
         };
 
-        window.openModal = (id) => {
-            const el = document.getElementById(id);
-            if(el) el.classList.remove('hidden');
-        };
-
-        window.closeModal = (id) => {
-            const el = document.getElementById(id);
-            if(el) el.classList.add('hidden');
-        };
+        window.openModal = (id) => { document.getElementById(id)?.classList.remove('hidden'); };
+        window.closeModal = (id) => { document.getElementById(id)?.classList.add('hidden'); };
 
         window.switchTab = (tab) => {
-            ['apresentacao', 'membros', 'eventos', 'aliancas'].forEach(t => {
+            ['apresentacao', 'membros', 'eventos', 'aliancas', 'recrutamento'].forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('btn-' + t);
                 if (!el || !btn) return;
                 if (t === tab) { 
-                    el.classList.remove('hidden'); 
-                    btn.classList.add('tab-active'); 
-                    btn.classList.remove('text-pink-300'); 
+                    el.classList.remove('hidden'); btn.classList.add('tab-active'); btn.classList.remove('text-pink-300'); 
                 } else { 
-                    el.classList.add('hidden'); 
-                    btn.classList.remove('tab-active'); 
-                    btn.classList.add('text-pink-300'); 
+                    el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('text-pink-300'); 
                 }
             });
             lucide.createIcons();
         };
 
         window.switchLoginTab = (type) => {
-            const afkSection = document.getElementById('login-afk-section');
-            const allySection = document.getElementById('login-ally-section');
-            const afkBtn = document.getElementById('tab-login-afk');
-            const allyBtn = document.getElementById('tab-login-ally');
+            const afkS = document.getElementById('login-afk-section');
+            const allyS = document.getElementById('login-ally-section');
+            const afkB = document.getElementById('tab-login-afk');
+            const allyB = document.getElementById('tab-login-ally');
             if (type === 'afk') {
-                afkSection?.classList.remove('hidden');
-                allySection?.classList.add('hidden');
-                afkBtn?.classList.add('login-tab-active');
-                allyBtn?.classList.remove('login-tab-active');
+                afkS?.classList.remove('hidden'); allyS?.classList.add('hidden');
+                afkB?.classList.add('login-tab-active'); allyB?.classList.remove('login-tab-active');
             } else {
-                afkSection?.classList.add('hidden');
-                allySection?.classList.remove('hidden');
-                afkBtn?.classList.remove('login-tab-active');
-                allyBtn?.classList.add('login-tab-active');
+                afkS?.classList.add('hidden'); allyS?.classList.remove('hidden');
+                afkB?.classList.remove('login-tab-active'); allyB?.classList.add('login-tab-active');
                 populateAllySelect();
             }
         };
 
-        window.handleKeyNav = (event, nextId, prevId = null) => {
-            if (event.key === "ArrowDown") {
+        // --- NAVEGAÇÃO DE TECLADO ---
+        window.handleKeyNav = (event, nextId, prevId, isLast) => {
+            if (event.key === "ArrowDown" && nextId) {
                 event.preventDefault();
-                if (nextId) document.getElementById(nextId)?.focus();
+                document.getElementById(nextId)?.focus();
             } else if (event.key === "ArrowUp" && prevId) {
                 event.preventDefault();
                 document.getElementById(prevId)?.focus();
             } else if (event.key === "Enter") {
-                if (event.target.id.includes("login-afk")) window.handleLoginAFK();
-                if (event.target.id.includes("login-ally")) window.handleLoginAlly();
+                event.preventDefault();
+                if (isLast) {
+                    if (event.target.id.includes('afk')) window.handleLoginAFK();
+                    else window.handleLoginAlly();
+                } else if (nextId) {
+                    document.getElementById(nextId)?.focus();
+                }
             }
         };
 
         window.handleLoginAFK = () => {
-            const nickInput = document.getElementById('login-afk-user').value.trim();
+            const nick = document.getElementById('login-afk-user').value.trim();
             const pass = document.getElementById('login-afk-pass').value;
-            
-            if (!nickInput) return window.notify("Digita o teu nick!", "error");
-
-            // 1. Verificar se é Admin
-            if (nickInput.toLowerCase() === ADMIN_NAME.toLowerCase() && pass === ADMIN_PASSWORD) {
-                return loginSuccess(ADMIN_NAME, true, false);
-            } 
-            
-            // 2. Verificar se o nick está na lista de membros permitidos
-            const isMember = ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickInput.toLowerCase());
-            
-            if (!isMember) {
-                return window.notify("Este nick não faz parte do clã AFK!", "error");
+            if (!nick) return window.notify("Digita o teu nick!", "error");
+            if (nick.toLowerCase() === "luhnny" && pass === ADMIN_PASSWORD) return loginSuccess("Luhnny", true, false);
+            if ((nick.toLowerCase() === "lagartuuuxaaa" || nick.toLowerCase() === "k0ssh1_") && pass === SUB_ADMIN_PASSWORD) {
+                return loginSuccess(nick.toLowerCase() === "lagartuuuxaaa" ? "Lagartuuuxaaa" : "K0ssh1_", true, false);
             }
-
-            // 3. Verificar a senha do clã
-            if (pass === CLAN_PASSWORD) {
-                // Encontrar o nick com a capitalização correta da lista
-                const correctNick = ALLOWED_MEMBERS.find(m => m.toLowerCase() === nickInput.toLowerCase());
-                loginSuccess(correctNick, false, false);
-            } else {
-                window.notify("Senha incorreta!", "error");
+            if (ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase()) && pass === CLAN_PASSWORD) {
+                return loginSuccess(ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase()), false, false);
             }
+            window.notify("Dados incorretos!", "error");
         };
 
         window.handleLoginAlly = async () => {
             const nick = document.getElementById('login-ally-user').value.trim();
             const pass = document.getElementById('login-ally-pass').value;
-            const clanName = document.getElementById('login-ally-clan').value;
-            if (!nick) return window.notify("Digita o teu nick!", "error");
-            if (!clanName) return window.notify("Seleciona o teu clã aliado!", "error");
-            if (pass === ALLY_PASSWORD) {
-                await registerAllyNickInDatabase(nick, clanName);
-                loginSuccess(`${nick} [${clanName}]`, false, true);
-            } else {
-                window.notify("Senha da aliança incorreta!", "error");
-            }
+            const clan = document.getElementById('login-ally-clan').value;
+            if (!nick || !clan) return window.notify("Preenche os dados!", "error");
+            if (pass === ALLY_PASSWORD) { await registerAllyNick(nick, clan); loginSuccess(`${nick} [${clan}]`, false, true); }
+            else window.notify("Senha da aliança incorreta!", "error");
         };
 
-        async function registerAllyNickInDatabase(nick, clanName) {
-            let allyDoc = allAlliances.find(a => a.name === clanName);
-            if (allyDoc) {
-                const members = allyDoc.members || [];
-                if (!members.includes(nick)) {
-                    const newMembers = [...members, nick];
-                    try {
-                        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allyDoc.id), {
-                            members: newMembers
-                        });
-                    } catch(e) { console.error("Erro ao registrar nick", e); }
+        async function registerAllyNick(nick, clan) {
+            let docAlly = allAlliances.find(a => a.name === clan);
+            if (docAlly) {
+                if (!(docAlly.members || []).includes(nick)) {
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', docAlly.id), { members: [...(docAlly.members || []), nick] });
                 }
             } else {
-                const tag = clanName === "C0RV0S" ? "CR0W" : clanName === "Tenebris" ? "TNB" : "ALLY";
-                try {
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), {
-                        name: clanName,
-                        tag: tag,
-                        members: [nick],
-                        createdAt: Date.now()
-                    });
-                } catch(e) { console.error("Erro ao criar clã aliado", e); }
+                const tag = clan === "C0RV0S" ? "CR0W" : clan === "Tenebris" ? "TNB" : "ALLY";
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: clan, tag, members: [nick], createdAt: Date.now() });
             }
         }
 
@@ -204,33 +168,73 @@
             window.closeModal('modal-login');
         }
 
-        window.logout = () => {
-            currentUser = null;
-            localStorage.removeItem('afk_user');
-            updateUI();
-            window.notify("Sessão encerrada.", "info");
+        window.logout = () => { currentUser = null; localStorage.removeItem('afk_user'); updateUI(); window.notify("Sessão encerrada.", "info"); };
+
+        // --- RECRUTAMENTO ---
+        window.toggleRecruitmentStatus = async () => {
+            if (!currentUser || !ADMINS_LIST.includes(currentUser.name)) return;
+            try {
+                const nextState = !isRecruitmentOpen;
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), { isOpen: nextState });
+                window.notify(nextState ? "Recrutamento Aberto!" : "Recrutamento Fechado!", "info");
+            } catch(e) { window.notify("Erro ao alterar estado.", "error"); }
         };
 
-        // --- GESTÃO DE EVENTOS ---
+        window.submitRecruitment = async () => {
+            if (!isRecruitmentOpen) return window.notify("Recrutamento fechado.", "error");
+            const nick = document.getElementById('rec-nick').value.trim();
+            const data = {
+                nick, discord: document.getElementById('rec-discord').value.trim(), 
+                idade: document.getElementById('rec-idade').value, tempo: document.getElementById('rec-tempo').value,
+                clas: document.getElementById('rec-clas').value, combate: document.getElementById('rec-combate').value,
+                build: document.getElementById('rec-build').value, farm: document.getElementById('rec-farm').value,
+                voice: document.getElementById('rec-voice').value, plataforma: document.getElementById('rec-plat').value,
+                rank: document.getElementById('rec-rank').value, horarios: document.getElementById('rec-horarios').value || "N/I",
+                aniversario: document.getElementById('rec-aniv').value || "N/I", status: 'pendente', createdAt: Date.now()
+            };
+            const btn = document.getElementById('btn-submit-rec'); btn.disabled = true;
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data);
+                localStorage.setItem('afk_rec_nick', nick);
+                window.notify("Formulário enviado!", "success");
+                document.getElementById('form-recruitment').reset();
+                renderUserStatus();
+            } catch(e) { window.notify("Erro ao enviar.", "error"); }
+            finally { btn.disabled = false; }
+        };
 
-        window.openCreateModal = () => {
-            if (currentUser?.isAlly) return window.notify("Aliados não podem sugerir eventos!", "error");
-            editingEventId = null;
-            document.getElementById('modal-admin-title').innerText = currentUser.isAdmin ? "Publicar Novo Evento" : "Sugerir Novo Evento";
-            document.getElementById('btn-publish-trigger').innerText = currentUser.isAdmin ? "Publicar Agora" : "Enviar Sugestão";
+        function renderUserStatus() {
+            const myNick = localStorage.getItem('afk_rec_nick');
+            const div = document.getElementById('user-status-display');
+            if (!myNick) return div.classList.add('hidden');
+            const found = allApplications.find(a => a.nick.toLowerCase() === myNick.toLowerCase());
+            if (found) {
+                div.classList.remove('hidden');
+                const colors = { pendente: 'bg-yellow-100 text-yellow-700', aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700' };
+                const icons = { pendente: 'clock', aprovado: 'check-circle', negado: 'x-circle' };
+                div.innerHTML = `<div class="p-6 bg-white rounded-2xl border-2 border-pink-100 card-shadow flex items-center justify-between"><div class="flex items-center gap-4"><div class="p-3 ${colors[found.status]} rounded-full"><i data-lucide="${icons[found.status]}"></i></div><div><p class="text-[10px] font-bold uppercase opacity-50">Candidatura de ${found.nick}:</p><p class="text-lg font-bold uppercase tracking-widest">${found.status}</p></div></div><button onclick="localStorage.removeItem('afk_rec_nick'); renderUserStatus();" class="text-xs font-bold text-slate-300">LIMPAR</button></div>`;
+                lucide.createIcons();
+            } else div.classList.add('hidden');
+        }
+
+        window.updateApplicationStatus = async (id, status) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), { status }); };
+        window.requestDeleteApplication = (id) => { applicationToDeleteId = id; window.openModal('modal-confirm-rec-delete'); };
+        window.confirmRecDelete = async () => { if (!applicationToDeleteId) return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.closeModal('modal-confirm-rec-delete'); };
+
+        // --- EVENTOS (RESTAURADOS) ---
+        window.openCreateModal = () => { 
+            editingEventId = null; 
+            document.getElementById('modal-admin-title').innerText = currentUser.isAdmin ? "Publicar Evento" : "Sugerir Evento"; 
             ['ev-title', 'ev-theme', 'ev-date', 'ev-time', 'ev-loc', 'ev-p1', 'ev-p2', 'ev-p3', 'ev-rules'].forEach(id => {
-                const el = document.getElementById(id);
-                if(el) el.value = "";
+                const el = document.getElementById(id); if(el) el.value = "";
             });
-            window.openModal('modal-admin-event');
+            window.openModal('modal-admin-event'); 
         };
-
+        
         window.editClanEvent = (id) => {
-            const ev = allEvents.find(e => e.id === id);
-            if (!ev) return;
+            const ev = allEvents.find(e => e.id === id); if (!ev) return;
             editingEventId = id;
             document.getElementById('modal-admin-title').innerText = "Editar Evento";
-            document.getElementById('btn-publish-trigger').innerText = "Salvar Alterações";
             document.getElementById('ev-title').value = ev.title || "";
             document.getElementById('ev-theme').value = ev.theme || "";
             document.getElementById('ev-date').value = ev.date || "";
@@ -247,185 +251,103 @@
             const title = document.getElementById('ev-title').value.trim();
             const theme = document.getElementById('ev-theme').value.trim();
             if (!title || !theme) return window.notify("Título e Tema obrigatórios!", "error");
-            const btn = document.getElementById('btn-publish-trigger');
-            btn.disabled = true;
-            try {
-                const data = {
-                    title, theme,
-                    date: document.getElementById('ev-date').value || "A definir",
-                    time: document.getElementById('ev-time').value || "A definir",
-                    location: document.getElementById('ev-loc').value || "bawmc.net",
-                    prizes: [document.getElementById('ev-p1').value || "?", document.getElementById('ev-p2').value || "?", document.getElementById('ev-p3').value || "?"],
-                    rules: document.getElementById('ev-rules').value || "Sem regras adicionais.",
-                    updatedAt: Date.now()
-                };
-                if (editingEventId) {
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data);
-                    window.notify("Atualizado com sucesso!", "success");
-                } else {
-                    data.status = currentUser.isAdmin ? 'active' : 'suggestion';
-                    data.participants = [];
-                    data.createdAt = Date.now();
-                    data.suggestedBy = currentUser.name;
-                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data);
-                    window.notify(currentUser.isAdmin ? "Publicado!" : "Sugestão enviada!", "success");
-                }
-                window.closeModal('modal-admin-event');
-            } catch (e) { window.notify("Erro ao gravar!", "error"); }
-            finally { btn.disabled = false; }
+            const data = {
+                title, theme, 
+                date: document.getElementById('ev-date').value || "A definir",
+                time: document.getElementById('ev-time').value || "A definir",
+                location: document.getElementById('ev-loc').value || "bawmc.net",
+                prizes: [document.getElementById('ev-p1').value || "?", document.getElementById('ev-p2').value || "?", document.getElementById('ev-p3').value || "?"],
+                rules: document.getElementById('ev-rules').value || "Sem regras adicionais.", 
+                status: currentUser.isAdmin ? 'active' : 'suggestion',
+                participants: editingEventId ? allEvents.find(e=>e.id===editingEventId).participants : [], 
+                suggestedBy: currentUser.name, updatedAt: Date.now()
+            };
+            if (editingEventId) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data);
+            else await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data);
+            window.closeModal('modal-admin-event');
+            window.notify("Evento gravado!", "success");
         };
 
-        window.approveClanEvent = async (id) => {
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: 'active', updatedAt: Date.now() });
-                window.notify("Evento aprovado!", "success");
-            } catch (e) { window.notify("Erro ao aprovar.", "error"); }
-        };
-
-        window.updateClanEventStatus = async (id, currentStatus) => {
-            const next = currentStatus === 'active' ? 'ended' : 'active';
-            try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: next });
-                window.notify(next === 'ended' ? "Encerrado!" : "Reativado!", "info");
-            } catch (e) { window.notify("Erro ao mudar status.", "error"); }
-        };
-
+        window.approveClanEvent = async (id) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: 'active', updatedAt: Date.now() }); };
+        window.updateClanEventStatus = async (id, cur) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: cur === 'active' ? 'ended' : 'active' }); };
         window.toggleClanParticipation = async (id) => {
             if (!currentUser) return window.openModal('modal-login');
-            const ev = allEvents.find(e => e.id === id);
-            if (!ev) return;
-            let isParticipating = ev.participants.includes(currentUser.name);
-            let updatedParticipants = isParticipating 
-                ? ev.participants.filter(p => p !== currentUser.name) 
-                : [...ev.participants, currentUser.name];
-            window.notify(isParticipating ? "Inscrição cancelada." : "Inscrição confirmada!", "success");
-            try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { participants: updatedParticipants }); } 
-            catch (e) { window.notify("Erro ao atualizar.", "error"); }
+            const ev = allEvents.find(e => e.id === id); if (!ev) return;
+            const p = ev.participants.includes(currentUser.name) ? ev.participants.filter(x => x !== currentUser.name) : [...ev.participants, currentUser.name];
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { participants: p });
         };
+        window.requestDeleteEvent = (id) => { eventToDeleteId = id; window.openModal('modal-confirm-delete'); };
+        window.confirmDelete = async () => { if (!eventToDeleteId) return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId)); window.closeModal('modal-confirm-delete'); };
 
-        window.requestDeleteEvent = (id) => {
-            eventToDeleteId = id;
-            window.openModal('modal-confirm-delete');
-        };
-
-        window.confirmDelete = async () => {
-            if (!eventToDeleteId) return;
-            try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId));
-                window.notify("Removido.", "success");
-                window.closeModal('modal-confirm-delete');
-                eventToDeleteId = null;
-            } catch (e) { window.notify("Erro ao apagar!", "error"); }
-        };
-
-        // --- ALIANÇAS ---
-
+        // --- ALIANÇAS E SOLICITAÇÕES ---
         window.publishClanAlliance = async () => {
             const name = document.getElementById('ali-name').value.trim();
             const tag = document.getElementById('ali-tag').value.trim();
-            if (!name || !tag) return window.notify("Nome e Sigla obrigatórios!", "error");
-            try {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { 
-                    name, 
-                    tag, 
-                    members: [], 
-                    createdAt: Date.now() 
-                });
+            if (!name || !tag) return;
+            const data = { name, tag, requestedBy: currentUser.name, createdAt: Date.now() };
+            if (currentUser.name === "Luhnny") {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { ...data, members: [] });
                 window.notify("Aliança adicionada!", "success");
-                window.closeModal('modal-admin-alliance');
-            } catch (e) { window.notify("Erro ao salvar.", "error"); }
+            } else {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), data);
+                window.notify("Solicitação enviada para Luhnny!", "success");
+            }
+            window.closeModal('modal-admin-alliance');
         };
 
-        window.requestDeleteAlliance = (id) => {
-            allianceToDeleteId = id;
-            window.openModal('modal-confirm-alliance-delete');
-        };
-
-        window.confirmAllianceDelete = async () => {
-            if (!allianceToDeleteId) return;
+        window.approveAllianceRequest = async (id, data) => {
+            if (currentUser.name !== "Luhnny") return;
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId));
-                window.notify("Aliança removida.", "success");
-                window.closeModal('modal-confirm-alliance-delete');
-                allianceToDeleteId = null;
-            } catch (e) { window.notify("Erro ao apagar!", "error"); }
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: data.name, tag: data.tag, members: [], createdAt: Date.now() });
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id));
+                window.notify("Solicitação aprovada!", "success");
+            } catch(e) { window.notify("Erro ao aprovar.", "error"); }
         };
 
-        window.removeAllyMember = async (allianceId, nick) => {
-            if (!currentUser || !currentUser.isAdmin) return;
-            const ally = allAlliances.find(a => a.id === allianceId);
-            if (!ally) return;
-            const updatedMembers = ally.members.filter(m => m !== nick);
+        window.rejectAllianceRequest = async (id) => {
+            if (currentUser.name !== "Luhnny") return;
             try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceId), {
-                    members: updatedMembers
-                });
-                window.notify(`Membro ${nick} removido!`, "success");
-            } catch(e) { window.notify("Erro ao remover membro.", "error"); }
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id));
+                window.notify("Solicitação rejeitada.", "info");
+            } catch(e) { window.notify("Erro ao remover.", "error"); }
+        };
+
+        window.removeAllyMember = async (id, nick) => {
+            const a = allAlliances.find(x => x.id === id);
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(n => n !== nick) });
         };
 
         // --- RENDERIZAÇÃO ---
-
         function populateAllySelect() {
-            const select = document.getElementById('login-ally-clan');
-            if(!select) return;
-            const baseClans = ["C0RV0S", "Tenebris"];
-            let options = '<option value="">Selecionar o clã</option>';
-            baseClans.forEach(c => { options += `<option value="${c}">${c}</option>`; });
-            allAlliances.forEach(ali => {
-                if(!baseClans.includes(ali.name)) {
-                    options += `<option value="${ali.name}">${ali.name} (${ali.tag})</option>`;
-                }
-            });
-            select.innerHTML = options;
+            const s = document.getElementById('login-ally-clan'); if(!s) return;
+            let h = '<option value="">Selecionar clã</option><option value="C0RV0S">C0RV0S (CR0W)</option><option value="Tenebris">Tenebris (TNB)</option>';
+            allAlliances.forEach(a => { if(a.name!=="C0RV0S" && a.name!=="Tenebris") h += `<option value="${a.name}">${a.name} (${a.tag})</option>`; });
+            s.innerHTML = h;
         }
 
         function renderAlliances() {
-            const container = document.getElementById('alliances-list');
-            if (!container) return;
-            container.innerHTML = '';
+            const c = document.getElementById('alliances-list'); if (!c) return;
+            const reqC = document.getElementById('alliance-requests-section');
+            const reqL = document.getElementById('alliance-requests-list');
+            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            
+            c.innerHTML = '';
             if (allAlliances.length === 0) {
-                container.innerHTML = `
-                    <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between">
-                        <div><h4 class="text-xl font-bold text-slate-800">C0RV0S</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">CR0W</span></div>
-                        <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
-                    </div>
-                    <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between">
-                        <div><h4 class="text-xl font-bold text-slate-800">Tenebris</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">TNB</span></div>
-                        <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
-                    </div>
-                `;
+                c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`;
             } else {
-                allAlliances.forEach(ali => {
-                    const membersHtml = (ali.members && ali.members.length > 0) 
-                        ? `<div class="mt-4 flex flex-wrap gap-2">
-                            ${ali.members.map(m => `
-                                <span class="bg-slate-50 text-slate-600 px-3 py-1 rounded-lg text-xs font-bold border flex items-center gap-2">
-                                    ${m}
-                                    ${currentUser?.isAdmin ? `<button onclick="window.removeAllyMember('${ali.id}', '${m}')" class="text-red-400 hover:text-red-600"><i data-lucide="x" class="w-3 h-3"></i></button>` : ''}
-                                </span>`).join('')}
-                           </div>` 
-                        : `<p class="text-[10px] text-slate-300 mt-2 italic">Nenhum nick registrado ainda</p>`;
-
-                    container.innerHTML += `
-                        <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col group transition-all hover:scale-[1.02]">
-                            <div class="flex items-center justify-between">
-                                <div><h4 class="text-xl font-bold text-slate-800">${ali.name}</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">${ali.tag}</span></div>
-                                <div class="flex items-center gap-3">
-                                    ${currentUser && currentUser.isAdmin ? `<button onclick="window.requestDeleteAlliance('${ali.id}')" class="p-2 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : ''}
-                                    <div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div>
-                                </div>
-                            </div>
-                            <div class="mt-4 border-t pt-2">
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Membros Conectados:</span>
-                                ${membersHtml}
-                            </div>
-                        </div>
-                    `;
+                allAlliances.forEach(a => {
+                    const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join('');
+                    c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isAdmin ? `<button onclick="deleteDoc(doc(db,'artifacts',appId,'public','data','alliances','${a.id}'))" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`;
                 });
             }
-            lucide.createIcons();
-            populateAllySelect();
+
+            if (currentUser && currentUser.name === "Luhnny" && allAllianceRequests.length > 0) {
+                reqC.classList.remove('hidden'); reqL.innerHTML = '';
+                allAllianceRequests.forEach(r => {
+                    reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name} [${r.tag}]</h5><p class="text-[10px] text-yellow-600 font-bold">Solicitado por: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`;
+                });
+            } else reqC.classList.add('hidden');
+            lucide.createIcons(); populateAllySelect();
         }
 
         function renderEvents() {
@@ -438,15 +360,14 @@
             const actives = allEvents.filter(e => e.status === 'active');
             const history = allEvents.filter(e => e.status === 'ended');
             const suggestions = allEvents.filter(e => e.status === 'suggestion');
-            if(actContainer) actContainer.innerHTML = ''; 
-            if(histContainer) histContainer.innerHTML = ''; 
-            if(suggContainer) suggContainer.innerHTML = '';
+            if(actContainer) actContainer.innerHTML = ''; if(histContainer) histContainer.innerHTML = ''; if(suggContainer) suggContainer.innerHTML = '';
             if (currentUser && !currentUser.isAlly) adminPanel?.classList.remove('hidden'); else adminPanel?.classList.add('hidden');
-            if (currentUser && currentUser.isAdmin && suggestions.length > 0) {
-                if(suggSection) suggSection.classList.remove('hidden');
+            if (currentUser && ADMINS_LIST.includes(currentUser.name) && suggestions.length > 0) {
+                suggSection?.classList.remove('hidden');
                 suggestions.forEach(ev => suggContainer.innerHTML += createEventCard(ev, 'suggestion'));
             } else if (suggSection) suggSection.classList.add('hidden');
-            if (actives.length === 0) { if(noAct) noAct.classList.remove('hidden'); } else { if(noAct) noAct.classList.add('hidden'); actives.forEach(ev => actContainer.innerHTML += createEventCard(ev, 'active')); }
+            if (actives.length === 0) noAct?.classList.remove('hidden');
+            else { noAct?.classList.add('hidden'); actives.forEach(ev => actContainer.innerHTML += createEventCard(ev, 'active')); }
             history.forEach(ev => histContainer.innerHTML += createEventCard(ev, 'history'));
             lucide.createIcons();
         }
@@ -454,93 +375,87 @@
         function createEventCard(ev, type) {
             const isParticipating = currentUser && ev.participants.includes(currentUser.name);
             let controls = '';
-            const creditText = (ev.suggestedBy && ev.suggestedBy !== ADMIN_NAME) 
-                ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` 
-                : '';
-            const participantsList = `
-                <div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2">
-                    <span class="text-slate-400 font-bold uppercase text-xs">Participantes Inscritos (${ev.participants.length}):</span>
-                    <div class="flex flex-wrap gap-2">
-                        ${ev.participants.length > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ainda ninguém inscrito</span>'}
-                    </div>
-                </div>
-            `;
-            if (currentUser && currentUser.isAdmin) {
-                if (type === 'suggestion') {
-                    controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
-                        <button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold hover:bg-green-600 transition flex items-center gap-1"><i data-lucide="check" class="w-3 h-3"></i> Aprovar</button>
-                        <button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold hover:bg-pink-200 transition">Editar</button>
-                        <button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Rejeitar</button>
-                    </div>`;
-                } else {
-                    controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4">
-                        <button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold flex items-center gap-1 hover:bg-pink-200 transition"><i data-lucide="edit-3" class="w-3 h-3"></i> Editar</button>
-                        <button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg hover:bg-black transition font-bold">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button>
-                        <button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Excluir</button>
-                    </div>${participantsList}`;
-                }
-            } else if (currentUser && (type === 'active' || type === 'history')) {
-                controls = participantsList;
-            }
-            return `
-                <div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]">
-                    <div class="flex justify-between items-start mb-1">
-                        <h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3>
-                        <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span>
-                    </div>
-                    ${creditText}
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4">
-                        <div class="space-y-2">
-                            <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p>
-                            <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time}</p>
-                            <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p>
-                        </div>
-                        <div class="text-xs">
-                            <p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p>
-                            <p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p>
-                            <p class="mt-2 font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p>
-                            <p class="font-medium text-slate-600">${ev.theme}</p>
-                        </div>
-                    </div>
-                    <div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>
-                    ${type === 'active' ? `
-                        <button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isParticipating ? 'bg-red-50 text-red-500 hover:bg-red-100' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}">
-                            <i data-lucide="${isParticipating ? 'x-circle' : 'user-plus'}" class="w-5 h-5"></i>
-                            ${isParticipating ? 'Cancelar Participação' : 'Quero Participar'}
-                        </button>` : ''}
-                    ${controls}
-                </div>`;
+            const creditText = (ev.suggestedBy && !ADMINS_LIST.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
+            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${ev.participants.length}):</span><div class="flex flex-wrap gap-2">${ev.participants.length > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+            
+            const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
+
+            if (currentUser && ADMINS_LIST.includes(currentUser.name)) {
+                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg">Editar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
+                else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
+            } else if (currentUser && (type === 'active' || type === 'history')) controls = pList;
+
+            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isParticipating ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isParticipating ? 'x-circle' : 'user-plus'}"></i> ${isParticipating ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
         }
 
         function updateUI() {
-            const loginBtn = document.getElementById('btn-login-trigger');
-            const userDisplay = document.getElementById('user-logged-in');
-            const allianceAdmin = document.getElementById('admin-alliance-panel');
+            const lBtn = document.getElementById('btn-login-trigger'); const uDisp = document.getElementById('user-logged-in');
+            const aAllyBtn = document.getElementById('admin-alliance-panel'); const aEventBtn = document.getElementById('admin-event-panel');
+            const aRecPanel = document.getElementById('admin-recruitment-section');
+            const recToggle = document.getElementById('luhnny-recruitment-toggle');
+            const recFormS = document.getElementById('recruitment-form-section');
+            const recClosedM = document.getElementById('recruitment-closed-message');
+
             if (currentUser) {
-                loginBtn?.classList.add('hidden');
-                userDisplay?.classList.remove('hidden');
-                const nameEl = document.getElementById('logged-name');
-                if(nameEl) nameEl.innerText = currentUser.name;
-                currentUser.isAdmin ? allianceAdmin?.classList.remove('hidden') : allianceAdmin?.classList.add('hidden');
+                lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden');
+                document.getElementById('logged-name').innerText = currentUser.name;
+                const isAdmin = ADMINS_LIST.includes(currentUser.name);
+                isAdmin ? aAllyBtn?.classList.remove('hidden') : aAllyBtn?.classList.add('hidden');
+                isAdmin ? aRecPanel?.classList.remove('hidden') : aRecPanel?.classList.add('hidden');
+                !currentUser.isAlly ? aEventBtn?.classList.remove('hidden') : aEventBtn?.classList.add('hidden');
+                if (isAdmin) {
+                    recToggle?.classList.remove('hidden');
+                    recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO";
+                    recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`;
+                } else recToggle?.classList.add('hidden');
             } else {
-                loginBtn?.classList.remove('hidden');
-                userDisplay?.classList.add('hidden');
-                allianceAdmin?.classList.add('hidden');
+                lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden');
+                aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); recToggle?.classList.add('hidden');
             }
-            renderEvents();
-            renderAlliances();
+
+            if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); }
+            else { recFormS?.classList.add('hidden'); recClosedM?.classList.remove('hidden'); }
+
+            const hBadge = document.getElementById('header-rec-badge');
+            if (hBadge) {
+                hBadge.innerHTML = isRecruitmentOpen ? '<i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto' : '<i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado';
+                hBadge.className = `bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 shadow-2xl flex items-center gap-2 ${isRecruitmentOpen ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`;
+            }
+
+            renderUserStatus(); renderAlliances(); renderEvents(); renderAdminApplications();
+            lucide.createIcons();
         }
 
-        function listenToData() {
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (snap) => { allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderEvents(); });
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (snap) => { allAlliances = snap.docs.map(d => ({ id: d.id, ...d.data() })); renderAlliances(); });
+        function renderAdminApplications() {
+            const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !ADMINS_LIST.includes(currentUser.name)) return;
+            c.innerHTML = '';
+            if (allApplications.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido recebido.</p>'; }
+            else {
+                allApplications.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => {
+                    const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' };
+                    c.innerHTML += `
+                    <div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left">
+                        <div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div>
+                        <div class="grid grid-cols-2 gap-2 text-[10px] text-slate-600 mb-4 leading-tight">
+                            <p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Clãs:</strong> ${app.clas}</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p>
+                        </div>
+                        <div class="flex gap-2 border-t pt-4">
+                            <button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-green-600 transition">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-red-600 transition">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>`;
+                });
+            }
+            lucide.createIcons();
         }
 
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) try { await signInAnonymously(auth); } catch (e) {}
-            listenToData();
-            const saved = localStorage.getItem('afk_user');
-            if (saved) { currentUser = JSON.parse(saved); updateUI(); }
+        onAuthStateChanged(auth, async (u) => {
+            if (!u) await signInAnonymously(auth);
+            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) isRecruitmentOpen = s.data().isOpen; updateUI(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); renderEvents(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); renderAlliances(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); renderAlliances(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); renderAdminApplications(); renderUserStatus(); });
+            const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); updateUI(); }
             lucide.createIcons();
         });
     </script>
@@ -551,11 +466,13 @@
 
     <header class="py-16 px-4 text-center pink-gradient text-white shadow-lg mb-6 relative overflow-hidden">
         <div class="absolute top-6 right-6 md:top-8 md:right-12 recruitment-badge">
-            <div class="bg-white text-pink-600 px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 border-pink-200 shadow-2xl flex items-center gap-2"><i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado</div>
+            <div id="header-rec-badge" class="bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 border-pink-200 shadow-2xl flex items-center gap-2">
+                <i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto
+            </div>
         </div>
-        <h1 class="text-6xl font-extrabold tracking-tight mb-2 text-white drop-shadow-lg">CLÃ AFK</h1>
-        <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest">Criado por Luhnny</p>
-        <div class="mt-6 flex justify-center">
+        <h1 class="text-6xl font-extrabold tracking-tight mb-2 text-white drop-shadow-lg text-center w-full">CLÃ AFK</h1>
+        <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest text-center w-full">Criado por Luhnny</p>
+        <div class="mt-6 flex justify-center w-full">
             <button id="btn-login-trigger" onclick="window.openModal('modal-login')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2"><i data-lucide="log-in" class="w-4 h-4"></i> Acessar</button>
             <div id="user-logged-in" class="hidden bg-white/20 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-3">
                 <span>Olá, <strong id="logged-name"></strong></span>
@@ -565,24 +482,25 @@
     </header>
 
     <nav class="max-w-6xl mx-auto px-6 mb-10 border-b border-pink-200 text-center">
-        <div class="flex gap-4 md:gap-8 justify-center flex-wrap">
-            <button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-lg font-semibold tab-active flex items-center gap-2 transition-all"><i data-lucide="info" class="w-5 h-5"></i> Apresentação</button>
-            <button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-lg font-semibold text-pink-300 flex items-center gap-2 transition-all"><i data-lucide="users" class="w-5 h-5"></i> Membros</button>
-            <button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-lg font-semibold text-pink-300 flex items-center gap-2 transition-all"><i data-lucide="calendar" class="w-5 h-5"></i> Eventos</button>
-            <button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-lg font-semibold text-pink-300 flex items-center gap-2 transition-all"><i data-lucide="handshake" class="w-5 h-5"></i> Alianças</button>
+        <div class="flex gap-2 md:gap-8 justify-center flex-wrap">
+            <button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-sm md:text-lg font-semibold tab-active transition-all">Apresentação</button>
+            <button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button>
+            <button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button>
+            <button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button>
+            <button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button>
         </div>
     </nav>
 
     <main class="max-w-6xl mx-auto px-6">
-        <!-- SEÇÃO APRESENTAÇÃO -->
+        
+        <!-- APRESENTAÇÃO -->
         <div id="tab-apresentacao">
             <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed">
                 <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
-                <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-3"><i data-lucide="sparkles" class="w-8 h-8"></i> Breve apresentação</h2>
+                <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-3 text-center w-full"><i data-lucide="sparkles" class="w-8 h-8"></i> Breve apresentação</h2>
                 <div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8">
                     <p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p>
                     <p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.</p>
-                    <p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p>
                 </div>
                 <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left">
                     <i data-lucide="message-circle" class="text-pink-500 w-8 h-8"></i>
@@ -591,14 +509,13 @@
             </div>
         </div>
 
-        <!-- SEÇÃO MEMBROS -->
+        <!-- MEMBROS (RESTAURADO) -->
         <div id="tab-membros" class="hidden">
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2"><i data-lucide="users" class="w-6 h-6"></i> Membros Ativos</h2>
                 <div class="text-sm text-pink-400/70 italic font-medium">Total: 18 membros registrados</div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
-                <!-- Luhnny -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform">
                     <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3><div class="relative"><img src="luhnny.png" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"><div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm"><i data-lucide="star" class="w-4 h-4"></i></div></div></div>
                     <div class="space-y-3 mb-6 flex-grow text-sm">
@@ -607,133 +524,134 @@
                     </div>
                     <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full shadow-sm">Líder</span><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full shadow-sm">builder</span></div>
                 </div>
-                <!-- K0ssh1_ -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 27/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 13:30 - 01:30</span></div></div><div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full shadow-sm font-bold">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full shadow-sm">cpvp</span></div></div>
-                <!-- Lagartuuuxaaa -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="lagartuuuxaaa.png" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 01/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 22h - 02h</span></div></div><div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full shadow-sm font-bold">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full shadow-sm">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full shadow-sm">cpvp</span></div></div>
-                <!-- iaruchy -->
+                <!-- Outros Membros conforme original... -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 18/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full shadow-sm">cpvp</span></div></div>
-                <!-- 1gcy -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="1gcy.png" onerror="this.src='https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 05/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">build</span></div></div>
-                <!-- Pardas01 -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="1gcy.png" onerror="this.src='https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 05/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">build</span></div></div>
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" alt="Pardas01" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 16/06</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- baiano019 -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 14/05</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <!-- Raitzz_ -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Manhã</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- Invisivel -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 28/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <!-- NeverPuzzle -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 28/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 11/08</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- chorapropai -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/01</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Variável</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- felpipoca -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 21/01</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia e Madrugada</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- 1aswd -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 19/09</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia todo</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <!-- ynSunn -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 23/08</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- labubusista -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/02</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Quase sempre</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <!-- TheP1nk -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full shadow-sm font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <!-- 2aswd -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 20/05</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <!-- _Vzkls14 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 02h-21h</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full shadow-sm">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full shadow-sm font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full shadow-sm">builder</span></div></div>
             </div>
         </div>
 
-        <div id="tab-eventos" class="hidden">
-            <div class="bg-pink-50 border-2 border-pink-100 p-6 rounded-3xl mb-8 text-sm text-pink-700 max-w-4xl mx-auto flex items-start gap-4">
-                <i data-lucide="info" class="w-6 h-6 mt-1 flex-shrink-0"></i>
-                <p><strong>Instrução:</strong> Você pode criar ou sugerir eventos para o clã. A Luhnny revisará tudo antes de aprovar!</p>
+        <!-- EVENTOS -->
+        <div id="tab-eventos" class="hidden text-center">
+            <div class="bg-pink-50 border-2 border-pink-100 p-6 rounded-3xl mb-8 text-sm text-pink-700 max-w-4xl mx-auto flex items-start gap-4 text-left">
+                <i data-lucide="info" class="w-6 h-6 flex-shrink-0"></i>
+                <p><strong>Instrução:</strong> Você pode sugerir eventos para o clã. Basta apenas ter o nome do evento e o tema. A Luhnny revisará tudo antes de aprovar!</p>
             </div>
-            <div id="suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2"><i data-lucide="message-square"></i> Sugestões Pendentes</h3><div id="suggested-events-list"></div></div>
+            
+            <div id="suggestions-section" class="hidden mb-12">
+                <h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center w-full"><i data-lucide="message-square"></i> Sugestões Pendentes</h3>
+                <div id="suggested-events-list"></div>
+            </div>
+
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2"><i data-lucide="calendar-heart"></i> Cronograma</h2>
                 <button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0"><i data-lucide="plus-circle" class="w-4 h-4"></i> Criar / Sugerir Evento</button>
             </div>
+
             <div id="active-events-list"></div>
-            <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3><p class="text-slate-500 text-lg">Novidades em breve!</p></div>
-            <div class="mt-16 border-t border-pink-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5"></i> Histórico</h3><div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"></div></div>
+            
+            <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
+                <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3>
+                <p class="text-slate-500 text-lg">Novidades em breve!</p>
+            </div>
+
+            <div class="mt-16 border-t border-pink-100 pt-10 text-left">
+                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5"></i> Histórico</h3>
+                <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"></div>
+            </div>
         </div>
 
+        <!-- ALIANÇAS -->
         <div id="tab-aliancas" class="hidden text-center">
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4 md:text-left">
-                <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2>
-                <button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0"><i data-lucide="plus" class="w-4 h-4"></i> Adicionar Aliança</button>
+            <!-- Secção de Solicitações para Luhnny -->
+            <div id="alliance-requests-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-yellow-100">
+                <h3 class="text-xl font-bold text-yellow-600 mb-6 flex items-center gap-2 justify-center"><i data-lucide="clock"></i> Solicitações Pendentes (Luhnny)</h3>
+                <div id="alliance-requests-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
             </div>
+            <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2><button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition">Adicionar Aliança</button></div>
             <div id="alliances-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        </div>
+
+        <!-- RECRUTAMENTO -->
+        <div id="tab-recrutamento" class="hidden text-center">
+            <button id="luhnny-recruitment-toggle" onclick="window.toggleRecruitmentStatus()" class="hidden"></button>
+            <div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200"><h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center"><i data-lucide="shield-check"></i> Gerenciar Pedidos</h2><div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div>
+            <div id="user-status-display" class="max-w-3xl mx-auto mb-10 hidden"></div>
+            <div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase">Recrutamento Fechado</h2><p class="text-slate-500">Neste momento não estamos a aceitar candidaturas.</p></div>
+            <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center"><h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2><form id="form-recruitment" onsubmit="event.preventDefault(); window.submitRecruitment();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Discord (Usuário)*:</label><input type="text" id="rec-discord" required placeholder="Usuário" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Tempo de Jogo (horas)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Simple Voice Chat?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="Sim">Sim</option><option value="Não">Não</option></select></div><div class="col-span-full"><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Mobile ou PC?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div class="col-span-full"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2">Horários Disponíveis:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 h-12"></textarea></div><button type="submit" id="btn-submit-rec" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] active:scale-95 transition-all uppercase">Enviar Formulário</button></form></div>
         </div>
     </main>
 
     <footer class="py-10 text-center text-pink-400 text-sm opacity-70"><p>Clã AFK fundado em 2025 por Luhnny</p></footer>
 
-    <!-- MODAIS E LOGINS MANTIDOS -->
+    <!-- MODAL LOGIN -->
     <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-center">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
-            <div class="flex border-b mb-6">
-                <button id="tab-login-afk" onclick="window.switchLoginTab('afk')" class="flex-1 py-3 text-sm font-semibold login-tab-active transition-all">Login do clã AFK</button>
-                <button id="tab-login-ally" onclick="window.switchLoginTab('ally')" class="flex-1 py-3 text-sm font-semibold text-slate-400 transition-all">Login da aliança</button>
-            </div>
+            <div class="flex border-b mb-6"><button id="tab-login-afk" onclick="window.switchLoginTab('afk')" class="flex-1 py-3 text-sm font-semibold login-tab-active">Clã AFK</button><button id="tab-login-ally" onclick="window.switchLoginTab('ally')" class="flex-1 py-3 text-sm font-semibold text-slate-400">Aliança</button></div>
             <div id="login-afk-section" class="space-y-4 text-left">
-                <input type="text" id="login-afk-user" onkeydown="window.handleKeyNav(event, 'login-afk-pass')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick do minecraft">
-                <input type="password" id="login-afk-pass" onkeydown="window.handleKeyNav(event, null, 'login-afk-user')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha">
-                <button onclick="window.handleLoginAFK()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition">Acessar</button>
+                <input type="text" id="login-afk-user" onkeydown="window.handleKeyNav(event, 'login-afk-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick">
+                <input type="password" id="login-afk-pass" onkeydown="window.handleKeyNav(event, null, 'login-afk-user', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha">
+                <button onclick="window.handleLoginAFK()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold">Acessar</button>
             </div>
             <div id="login-ally-section" class="hidden space-y-4 text-left">
-                <input type="text" id="login-ally-user" onkeydown="window.handleKeyNav(event, 'login-ally-pass')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick do minecraft">
-                <input type="password" id="login-ally-pass" onkeydown="window.handleKeyNav(event, 'login-ally-clan')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha Aliança">
-                <select id="login-ally-clan" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 text-slate-500 font-medium"></select>
-                <button onclick="window.handleLoginAlly()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition">Entrar como Aliado</button>
+                <input type="text" id="login-ally-user" onkeydown="window.handleKeyNav(event, 'login-ally-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick">
+                <input type="password" id="login-ally-pass" onkeydown="window.handleKeyNav(event, 'login-ally-clan', 'login-ally-user', false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha Aliança">
+                <select id="login-ally-clan" onkeydown="window.handleKeyNav(event, null, 'login-ally-pass', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"></select>
+                <button onclick="window.handleLoginAlly()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold">Entrar como Aliado</button>
             </div>
-            <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-4 font-semibold uppercase">Fechar janela</button>
+            <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-4 uppercase font-semibold text-center">Fechar janela</button>
         </div>
     </div>
 
-    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
-            <h3 class="text-xl font-bold text-slate-800 mb-6">Eliminar Evento?</h3>
-            <div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 text-slate-500 font-bold py-3 rounded-xl">Não</button></div>
-        </div>
-    </div>
+    <!-- Modais Confirm -->
+    <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 text-slate-800">Eliminar Candidatura?</h3><div class="flex gap-4"><button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg">Sim</button><button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Não</button></div></div></div>
+    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition">Não</button></div></div></div>
+    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 text-slate-800">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition">Não</button></div></div></div>
 
-    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
-            <h3 class="text-xl font-bold text-slate-800 mb-6">Remover Aliança?</h3>
-            <div class="flex gap-4 mt-6"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg">Remover</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 text-slate-500 font-bold py-3 rounded-xl">Não</button></div>
-        </div>
-    </div>
-
+    <!-- Modal Admin Evento -->
     <div id="modal-admin-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 id="modal-admin-title" class="text-2xl font-bold text-pink-600 mb-6">Criar Evento</h3>
+        <div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+            <h3 id="modal-admin-title" class="text-2xl font-bold text-pink-600 mb-6 uppercase">Evento</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="text" id="ev-title" onkeydown="window.handleKeyNav(event, 'ev-theme')" placeholder="Título" class="p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                <input type="text" id="ev-theme" onkeydown="window.handleKeyNav(event, 'ev-date', 'ev-title')" placeholder="Tema" class="p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                <input type="date" id="ev-date" onkeydown="window.handleKeyNav(event, 'ev-time', 'ev-theme')" class="p-3 bg-slate-50 border rounded-xl outline-none">
-                <input type="time" id="ev-time" onkeydown="window.handleKeyNav(event, 'ev-loc', 'ev-date')" class="p-3 bg-slate-50 border rounded-xl outline-none">
-                <input type="text" id="ev-loc" onkeydown="window.handleKeyNav(event, 'ev-p1', 'ev-time')" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
+                <input type="text" id="ev-title" placeholder="Título*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                <input type="text" id="ev-theme" placeholder="Tema*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                <input type="date" id="ev-date" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                <input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
                 <div class="space-y-2">
                     <input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none">
                     <input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none">
                     <input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none">
                 </div>
             </div>
-            <textarea id="ev-rules" placeholder="Regras..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 outline-none focus:border-pink-300"></textarea>
-            <div class="flex gap-4"><button id="btn-publish-trigger" onclick="window.publishClanEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition font-bold uppercase">Publicar</button><button onclick="window.closeModal('modal-admin-event')" class="px-4 text-slate-400 font-semibold uppercase text-xs">Voltar</button></div>
+            <textarea id="ev-rules" placeholder="Regras e Descrição..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 focus:border-pink-300 outline-none"></textarea>
+            <div class="flex gap-4"><button id="btn-publish-trigger" onclick="window.publishClanEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all">Publicar</button><button onclick="window.closeModal('modal-admin-event')" class="px-4 text-slate-400 text-xs font-bold uppercase">Voltar</button></div>
         </div>
     </div>
 
+    <!-- Modal Admin Aliança -->
     <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <h3 class="text-2xl font-bold text-pink-600 mb-6">Nova Aliança</h3>
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase">Nova Aliança</h3>
             <div class="space-y-4">
-                <input type="text" id="ali-name" placeholder="Nome do Clã (Ex: C0RV0S)" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                <input type="text" id="ali-tag" placeholder="Sigla do Clã (Ex: CR0W)" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg">Adicionar</button>
-                <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold">Cancelar</button>
+                <input type="text" id="ali-name" placeholder="Nome do Clã" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                <input type="text" id="ali-tag" placeholder="Sigla" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold">Solicitar / Adicionar</button>
+                <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center">Cancelar</button>
             </div>
         </div>
     </div>
