@@ -7,47 +7,238 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, query, onSnapshot, updateDoc, addDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Configurações do Firebase
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "",
+            authDomain: "clan-afk-default.firebaseapp.com",
+            projectId: "clan-afk-default",
+            storageBucket: "clan-afk-default.appspot.com",
+            messagingSenderId: "123",
+            appId: "123"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'clan-afk-v1';
+
+        let currentUser = null;
+        // Senhas Atualizadas
+        const CLAN_PASSWORD = "2v2nt4"; 
+        const ADMIN_PASSWORD = "sp3k22m31"; 
+        const ADMIN_NAME = "Luhnny";
+
+        window.onload = async () => {
+            await signInAnonymously(auth);
+            onAuthStateChanged(auth, (user) => { if (user) initApp(); });
+        };
+
+        function initApp() {
+            lucide.createIcons();
+            listenToEvents();
+            checkSession();
+        }
+
+        // --- SISTEMA DE ACESSO ---
+        window.handleLogin = () => {
+            const user = document.getElementById('login-user').value.trim();
+            const pass = document.getElementById('login-pass').value;
+            if (!user) return notify("Digite seu nick!", "error");
+
+            if (user === ADMIN_NAME && pass === ADMIN_PASSWORD) {
+                loginSuccess(user, true);
+            } else if (pass === CLAN_PASSWORD) {
+                loginSuccess(user, false);
+            } else {
+                notify("Senha incorreta!", "error");
+            }
+        };
+
+        function loginSuccess(name, isAdmin) {
+            currentUser = { name, isAdmin };
+            localStorage.setItem('afk_user', JSON.stringify(currentUser));
+            updateUI();
+            notify(`Bem-vinda(o), ${name}!`, "success");
+            closeModal('modal-login');
+        }
+
+        function checkSession() {
+            const saved = localStorage.getItem('afk_user');
+            if (saved) { currentUser = JSON.parse(saved); updateUI(); }
+        }
+
+        window.logout = () => {
+            currentUser = null;
+            localStorage.removeItem('afk_user');
+            updateUI();
+            notify("Você saiu.", "info");
+        };
+
+        function updateUI() {
+            const loginBtn = document.getElementById('btn-login-trigger');
+            const userDisplay = document.getElementById('user-logged-in');
+            const adminPanel = document.getElementById('admin-event-panel');
+            if (currentUser) {
+                loginBtn.classList.add('hidden');
+                userDisplay.classList.remove('hidden');
+                document.getElementById('logged-name').innerText = currentUser.name;
+                currentUser.isAdmin ? adminPanel.classList.remove('hidden') : adminPanel.classList.add('hidden');
+                currentUser.isAdmin ? document.getElementById('badge-admin').classList.remove('hidden') : document.getElementById('badge-admin').classList.add('hidden');
+            } else {
+                loginBtn.classList.remove('hidden');
+                userDisplay.classList.add('hidden');
+                adminPanel.classList.add('hidden');
+            }
+            renderEvents();
+        }
+
+        // --- GESTÃO DE EVENTOS ---
+        let allEvents = [];
+        function listenToEvents() {
+            const q = collection(db, 'artifacts', appId, 'public', 'data', 'events');
+            onSnapshot(q, (snapshot) => {
+                allEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderEvents();
+            });
+        }
+
+        window.createEvent = async () => {
+            const newEvent = {
+                title: document.getElementById('ev-title').value || "Novo Evento",
+                date: document.getElementById('ev-date').value || "A definir",
+                time: document.getElementById('ev-time').value || "A definir",
+                location: document.getElementById('ev-loc').value || "bawmc.net",
+                theme: document.getElementById('ev-theme').value || "Geral",
+                prizes: [document.getElementById('ev-p1').value || "?", document.getElementById('ev-p2').value || "?", document.getElementById('ev-p3').value || "?"],
+                rules: document.getElementById('ev-rules').value || "Regras em breve...",
+                status: 'active',
+                participants: [],
+                createdAt: Date.now()
+            };
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), newEvent);
+            notify("Evento criado!", "success");
+            closeModal('modal-admin-event');
+        };
+
+        window.toggleEventStatus = async (id, currentStatus) => {
+            const newStatus = currentStatus === 'active' ? 'ended' : 'active';
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: newStatus });
+            notify(newStatus === 'ended' ? "Evento Encerrado" : "Evento Ativado", "info");
+        };
+
+        window.deleteEvent = async (id) => {
+            if(confirm("Deseja excluir este evento permanentemente?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id));
+        };
+
+        window.participate = async (eventId) => {
+            if (!currentUser) return openModal('modal-login');
+            const event = allEvents.find(e => e.id === eventId);
+            if (event.participants.includes(currentUser.name)) return notify("Você já está inscrito!", "info");
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId), { participants: [...event.participants, currentUser.name] });
+            notify("Inscrição confirmada!", "success");
+        };
+
+        function renderEvents() {
+            const activeContainer = document.getElementById('active-events-list');
+            const historyContainer = document.getElementById('history-events-list');
+            const noActiveMessage = document.getElementById('no-active-message');
+            const actives = allEvents.filter(e => e.status === 'active');
+            const history = allEvents.filter(e => e.status === 'ended');
+
+            activeContainer.innerHTML = ''; historyContainer.innerHTML = '';
+            actives.length === 0 ? noActiveMessage.classList.remove('hidden') : noActiveMessage.classList.add('hidden');
+            
+            actives.forEach(ev => activeContainer.innerHTML += createEventCard(ev, true));
+            history.forEach(ev => historyContainer.innerHTML += createEventCard(ev, false));
+            lucide.createIcons();
+        }
+
+        function createEventCard(ev, isActive) {
+            const isParticipating = currentUser && ev.participants.includes(currentUser.name);
+            const adminControls = (currentUser && currentUser.isAdmin) ? `
+                <div class="mt-4 flex gap-2 border-t pt-4">
+                    <button onclick="toggleEventStatus('${ev.id}', '${ev.status}')" class="text-xs bg-slate-800 text-white px-3 py-1 rounded-lg hover:bg-black transition">${isActive ? 'Encerrar' : 'Reativar'}</button>
+                    <button onclick="deleteEvent('${ev.id}')" class="text-xs bg-red-100 text-red-600 px-3 py-1 rounded-lg hover:bg-red-200 transition">Excluir</button>
+                </div>
+                <div class="mt-2 text-[10px] text-slate-400 font-bold">Inscritos (${ev.participants.length}): ${ev.participants.join(', ') || 'Nenhum'}</div>
+            ` : '';
+
+            return `
+                <div class="bg-white rounded-3xl card-shadow border-2 ${isActive ? 'border-pink-200' : 'border-slate-200 opacity-75'} p-6 mb-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-xl font-bold ${isActive ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3>
+                        <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${isActive ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-500'}">${isActive ? 'Ativo' : 'Encerrado'}</span>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6">
+                        <div class="space-y-2">
+                            <p class="flex items-center gap-2 font-medium"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p>
+                            <p class="flex items-center gap-2 font-medium"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time}</p>
+                            <p class="flex items-center gap-2 font-medium"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p>
+                        </div>
+                        <div class="text-xs">
+                            <p class="font-bold text-pink-400 uppercase mb-1">Prêmios:</p>
+                            <p class="font-medium text-slate-600">🥇 ${ev.prizes[0]} | 🥈 ${ev.prizes[1]} | 🥉 ${ev.prizes[2]}</p>
+                            <p class="mt-2 font-bold text-pink-400 uppercase mb-1">Tema:</p>
+                            <p class="font-medium text-slate-600">${ev.theme}</p>
+                        </div>
+                    </div>
+                    ${isActive ? `<button onclick="participate('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isParticipating ? 'bg-green-100 text-green-600 cursor-default' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isParticipating ? 'check-circle' : 'user-plus'}" class="w-5 h-5"></i>${isParticipating ? 'Inscrito com Sucesso!' : 'Participar do Evento'}</button>` : ''}
+                    ${adminControls}
+                </div>
+            `;
+        }
+
+        window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
+        window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
+        function notify(msg, type) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-white font-bold shadow-2xl transition-all z-[100] ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-pink-500'}`;
+            toast.style.display = 'block'; setTimeout(() => toast.style.display = 'none', 3000);
+        }
+    </script>
+
     <style>
-        body {
-            font-family: 'Poppins', sans-serif;
-            background-color: #fff1f2; /* Fundo rosa bem clarinho */
-        }
-        .pink-gradient {
-            background: linear-gradient(135deg, #fbcfe8 0%, #f9a8d4 100%);
-        }
-        .card-shadow {
-            box-shadow: 0 10px 25px -5px rgba(244, 114, 182, 0.1), 0 8px 10px -6px rgba(244, 114, 182, 0.1);
-        }
-        .tab-active {
-            color: #db2777;
-            border-bottom: 3px solid #db2777;
-        }
-        .hidden {
-            display: none;
-        }
-        /* Animação suave para o distintivo de recrutamento */
-        @keyframes subtle-pulse {
-            0%, 100% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.05); opacity: 0.9; }
-        }
-        .recruitment-badge {
-            animation: subtle-pulse 3s infinite ease-in-out;
-        }
+        body { font-family: 'Poppins', sans-serif; background-color: #fff1f2; }
+        .pink-gradient { background: linear-gradient(135deg, #fbcfe8 0%, #f9a8d4 100%); }
+        .card-shadow { box-shadow: 0 10px 25px -5px rgba(244, 114, 182, 0.1), 0 8px 10px -6px rgba(244, 114, 182, 0.1); }
+        .tab-active { color: #db2777; border-bottom: 3px solid #db2777; }
+        .hidden { display: none; }
+        @keyframes subtle-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.9; } }
+        .recruitment-badge { animation: subtle-pulse 3s infinite ease-in-out; }
+        .modal-bg { background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
     </style>
 </head>
-<body class="min-h-screen text-slate-800">
+<body class="min-h-screen text-slate-800 pb-20">
+
+    <div id="toast" style="display:none"></div>
 
     <!-- Cabeçalho -->
     <header class="py-16 px-4 text-center pink-gradient text-white shadow-lg mb-6 relative overflow-hidden">
-        <!-- Distintivo de Recrutamento -->
         <div class="absolute top-6 right-6 md:top-8 md:right-12 recruitment-badge">
             <div class="bg-white text-pink-600 px-5 py-2 rounded-2xl text-xs font-bold uppercase tracking-widest border-2 border-pink-200 shadow-2xl flex items-center gap-2">
                 <i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado
             </div>
         </div>
-        
-        <h1 class="text-6xl font-extrabold tracking-tight mb-2 drop-shadow-md">CLÃ AFK</h1>
+        <h1 class="text-6xl font-extrabold tracking-tight mb-2 drop-shadow-md text-white">CLÃ AFK</h1>
         <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest">Criado por Luhnny</p>
+
+        <!-- Barra de Login -->
+        <div class="mt-6 flex justify-center">
+            <button id="btn-login-trigger" onclick="openModal('modal-login')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-sm transition flex items-center gap-2">
+                <i data-lucide="log-in" class="w-4 h-4"></i> Acesso Membro
+            </button>
+            <div id="user-logged-in" class="hidden bg-white/20 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-sm flex items-center gap-3">
+                <span>Olá, <strong id="logged-name"></strong> <span id="badge-admin" class="hidden text-[10px] bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded ml-1">LÍDER</span></span>
+                <button onclick="logout()" class="hover:text-red-200 transition">Sair</button>
+            </div>
+        </div>
     </header>
 
     <!-- Navegação -->
@@ -65,43 +256,27 @@
         </div>
     </nav>
 
-    <main class="max-w-6xl mx-auto px-6 pb-20">
+    <main class="max-w-6xl mx-auto px-6">
         
-        <!-- SEÇÃO DE APRESENTAÇÃO -->
+        <!-- SEÇÃO DE APRESENTAÇÃO (ORIGINAL) -->
         <div id="tab-apresentacao">
             <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto leading-relaxed text-center">
-                <!-- Ícone do Clã -->
                 <div class="flex justify-center mb-8">
                     <div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner">
-                        <img src="icone.png" 
-                             alt="Ícone Clã AFK" 
-                             onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'"
-                             class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover">
+                        <img src="icone.png" alt="Ícone Clã AFK" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover">
                     </div>
                 </div>
-
                 <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-3">
                     <i data-lucide="sparkles" class="w-8 h-8"></i> Breve apresentação
                 </h2>
                 <div class="space-y-6 text-slate-600 text-lg text-left">
-                    <p>
-                        O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!
-                    </p>
-                    <p>
-                        O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.
-                    </p>
-                    <p>
-                        O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!
-                    </p>
-                    
+                    <p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p>
+                    <p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.</p>
+                    <p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p>
                     <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4">
                         <i data-lucide="message-circle" class="text-pink-500 w-8 h-8"></i>
-                        <p class="text-sm md:text-base font-medium">
-                            Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!
-                        </p>
+                        <p class="text-sm md:text-base font-medium">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p>
                     </div>
-
-                    <!-- Status de Recrutamento -->
                     <div class="mt-10 flex items-center justify-center gap-3 py-4 px-6 bg-slate-50 rounded-3xl text-slate-400 border-2 border-dashed border-slate-200">
                         <i data-lucide="user-x" class="w-6 h-6"></i>
                         <span class="text-sm font-bold tracking-widest uppercase">O recrutamento está fechado no momento</span>
@@ -110,12 +285,10 @@
             </div>
         </div>
 
-        <!-- SEÇÃO DE MEMBROS -->
+        <!-- SEÇÃO DE MEMBROS (RESTORED - EXATAMENTE O SEU CÓDIGO) -->
         <div id="tab-membros" class="hidden">
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
-                <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">
-                    Membros Ativos
-                </h2>
+                <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">Membros Ativos</h2>
                 <div class="text-sm text-pink-400/70 italic">Total: 17 membros registrados</div>
             </div>
 
@@ -123,28 +296,15 @@
                 <!-- Membro: Luhnny (Líder) -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform">
                     <div class="flex justify-between items-start mb-4">
-                        <h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">
-                            Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>
-                        </h3>
+                        <h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3>
                         <div class="relative">
-                            <img src="luhnny.png" 
-                                 alt="Luhnny" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                            <div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm border border-white">
-                                <i data-lucide="star" class="w-4 h-4"></i>
-                            </div>
+                            <img src="luhnny.png" alt="Luhnny" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
+                            <div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm border border-white"><i data-lucide="star" class="w-4 h-4"></i></div>
                         </div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 17/10</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Manhã e Noite</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/10</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Manhã e Noite</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">Líder</span>
@@ -156,22 +316,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3>
-                        <div class="relative">
-                            <img src="k0ssh1.png" 
-                                 alt="K0ssh1_" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="k0ssh1.png" alt="K0ssh1_" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 27/04</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: 13:30 - 01:30</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 27/04</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 13:30 - 01:30</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span>
@@ -183,22 +332,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3>
-                        <div class="relative">
-                            <img src="lagartuuuxaaa.png" 
-                                 alt="Lagartuuuxaaa" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="lagartuuuxaaa.png" alt="Lagartuuuxaaa" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 01/07</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: 22h - 02h</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 01/07</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 22h - 02h</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span>
@@ -214,14 +352,8 @@
                         <div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 14/05</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Noite</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 14/05</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span>
@@ -235,14 +367,8 @@
                         <div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 22/03</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Tarde e Manhã</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Manhã</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] font-bold uppercase rounded-full">farm</span>
@@ -253,22 +379,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">Invisivel</h3>
-                        <div class="relative">
-                            <img src="invisivel.png" 
-                                 alt="Invisivel" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="invisivel.png" alt="Invisivel" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 28/07</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Noite</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 28/07</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span>
@@ -285,14 +400,8 @@
                         <div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 11/08</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Tarde</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 11/08</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span>
@@ -309,14 +418,8 @@
                         <div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 16/06</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Tarde e Noite</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 16/06</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span>
@@ -329,22 +432,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">chorapropai</h3>
-                        <div class="relative">
-                            <img src="chorapropai.png" 
-                                 alt="chorapropai" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="chorapropai.png" alt="chorapropai" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 10/01</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Variável</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/01</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Variável</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span>
@@ -359,14 +451,8 @@
                         <div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 21/01</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Dia e Madrugada</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 21/01</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia e Madrugada</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span>
@@ -381,14 +467,8 @@
                         <div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 19/09</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Dia todo</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 19/09</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia todo</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span>
@@ -401,22 +481,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">ynSunn</h3>
-                        <div class="relative">
-                            <img src="ynsunn.png" 
-                                 alt="ynSunn" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="ynsunn.png" alt="ynSunn" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 23/08</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Tarde e Noite</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 23/08</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span>
@@ -429,22 +498,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">labubusista</h3>
-                        <div class="relative">
-                            <img src="labubusista.png" 
-                                 alt="labubusista" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="labubusista.png" alt="labubusista" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 17/02</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Quase sempre</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/02</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Quase sempre</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span>
@@ -461,14 +519,8 @@
                         <div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 18/04</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm opacity-50">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: N/A</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 18/04</span></div>
+                        <div class="flex items-center gap-3 text-sm opacity-50"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: N/A</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span>
@@ -479,22 +531,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">TheP1nk</h3>
-                        <div class="relative">
-                            <img src="thep1nk.png" 
-                                 alt="TheP1nk" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="thep1nk.png" alt="TheP1nk" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 10/07</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Tarde e Noite</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/07</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-purple-100 text-purple-600 text-[10px] font-bold uppercase rounded-full">pvp</span>
@@ -508,22 +549,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">2aswd</h3>
-                        <div class="relative">
-                            <img src="2awsd.png" 
-                                 alt="2aswd" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="2awsd.png" alt="2aswd" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 20/05</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: Toda hora</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 20/05</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span>
@@ -536,22 +566,11 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3>
-                        <div class="relative">
-                            <img src="vzkls14.png" 
-                                 alt="_Vzkls14" 
-                                 onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'"
-                                 class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
-                        </div>
+                        <div class="relative"><img src="vzkls14.png" alt="_Vzkls14" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     </div>
                     <div class="space-y-3 mb-6 flex-grow">
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="cake" class="w-4 h-4 text-pink-300"></i>
-                            <span>Aniversário: 22/03</span>
-                        </div>
-                        <div class="flex items-center gap-3 text-sm">
-                            <i data-lucide="clock" class="w-4 h-4 text-pink-300"></i>
-                            <span>Disponível: 02:00 - 21:00</span>
-                        </div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div>
+                        <div class="flex items-center gap-3 text-sm"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 02:00 - 21:00</span></div>
                     </div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
                         <span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span>
@@ -560,136 +579,94 @@
             </div>
         </div>
 
-        <!-- SEÇÃO DE EVENTOS -->
+        <!-- SEÇÃO DE EVENTOS (DINÂMICA) -->
         <div id="tab-eventos" class="hidden">
-            <div class="mb-8">
-                <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">
-                    Cronograma de Eventos
-                </h2>
-                <p class="text-pink-300 text-sm italic">Fique atento às atualizações do clã!</p>
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">
+                        <i data-lucide="calendar-heart"></i> Cronograma de Eventos
+                    </h2>
+                    <p class="text-pink-300 text-sm italic">O login é apenas para se inscrever ou administrar!</p>
+                </div>
+                <button id="admin-event-panel" onclick="openModal('modal-admin-event')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Criar Novo Evento
+                </button>
             </div>
 
-            <!-- Card de Evento em Breve -->
-            <div class="bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
-                <div class="inline-flex p-4 bg-pink-50 rounded-full text-pink-400 mb-6">
-                    <i data-lucide="calendar-heart" class="w-12 h-12"></i>
-                </div>
-                <h3 class="text-3xl font-extrabold text-pink-500 mb-2">EM BREVE</h3>
-                <p class="text-slate-500 mb-8 text-lg">Estamos preparando eventos divertidos para o clã!</p>
+            <!-- Lista de Eventos Ativos -->
+            <div id="active-events-list"></div>
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-left border-t border-pink-50 pt-8 mb-8">
-                    <div class="space-y-5">
-                        <div class="flex items-start gap-4">
-                            <i data-lucide="calendar-days" class="w-6 h-6 text-pink-300 mt-1"></i>
-                            <div>
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Data do evento</p>
-                                <p class="text-base font-medium">A definir</p>
-                            </div>
-                        </div>
-                        <div class="flex items-start gap-4">
-                            <i data-lucide="clock-3" class="w-6 h-6 text-pink-300 mt-1"></i>
-                            <div>
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Hora do evento</p>
-                                <p class="text-base font-medium">A definir</p>
-                            </div>
-                        </div>
-                        <div class="flex items-start gap-4">
-                            <i data-lucide="map-pin" class="w-6 h-6 text-pink-300 mt-1"></i>
-                            <div>
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Local do evento</p>
-                                <p class="text-base font-medium">A definir</p>
-                            </div>
-                        </div>
-                    </div>
+            <!-- Mensagem quando não há eventos -->
+            <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
+                <div class="inline-flex p-4 bg-pink-50 rounded-full text-pink-400 mb-6"><i data-lucide="calendar-x" class="w-12 h-12"></i></div>
+                <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3>
+                <p class="text-slate-500 text-lg">A Luhnny ainda não ativou nenhum evento. Fique de olho!</p>
+            </div>
 
-                    <div class="space-y-5">
-                        <div class="flex items-start gap-4">
-                            <i data-lucide="sparkles" class="w-6 h-6 text-pink-300 mt-1"></i>
-                            <div>
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Tema do evento</p>
-                                <p class="text-base font-medium">A definir</p>
-                            </div>
-                        </div>
-                        <div class="flex items-start gap-4">
-                            <i data-lucide="trophy" class="w-6 h-6 text-pink-300 mt-1"></i>
-                            <div>
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Prêmios</p>
-                                <ul class="text-sm space-y-1.5 font-medium text-slate-600 mt-1">
-                                    <li class="flex items-center gap-2">🥇 1º Lugar: <span class="text-pink-500 font-bold">?</span></li>
-                                    <li class="flex items-center gap-2">🥈 2º Lugar: <span class="text-pink-400 font-bold">?</span></li>
-                                    <li class="flex items-center gap-2">🥉 3º Lugar: <span class="text-pink-300 font-bold">?</span></li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="flex items-start gap-4">
-                            <i data-lucide="lightbulb" class="w-6 h-6 text-pink-300 mt-1"></i>
-                            <div>
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider">Ideia por</p>
-                                <p class="text-base font-medium italic text-slate-400">Membro destaque</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Seções Adicionais: Regras e Funcionamento -->
-                <div class="grid grid-cols-1 gap-8 text-left border-t border-pink-50 pt-8">
-                    <div class="space-y-6">
-                        <div class="flex items-start gap-4">
-                            <div class="p-2 bg-pink-50 rounded-xl text-pink-400">
-                                <i data-lucide="clipboard-list" class="w-6 h-6"></i>
-                            </div>
-                            <div class="w-full">
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider mb-2">Regras do evento</p>
-                                <div class="bg-slate-50 p-5 rounded-2xl text-sm text-slate-500 italic border border-slate-100">
-                                    Regulamento em fase de elaboração...
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex items-start gap-4">
-                            <div class="p-2 bg-pink-50 rounded-xl text-pink-400">
-                                <i data-lucide="settings" class="w-6 h-6"></i>
-                            </div>
-                            <div class="w-full">
-                                <p class="text-[11px] font-bold uppercase text-pink-400 tracking-wider mb-2">Como vai funcionar</p>
-                                <div class="bg-slate-50 p-5 rounded-2xl text-sm text-slate-500 italic border border-slate-100">
-                                    Instruções de participação em breve...
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <!-- Histórico -->
+            <div class="mt-16 border-t border-pink-100 pt-10">
+                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2"><i data-lucide="history" class="w-5 h-5"></i> Histórico de Eventos</h3>
+                <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
             </div>
         </div>
-
     </main>
 
     <footer class="py-10 text-center text-pink-400 text-sm opacity-70">
         <p>Clã AFK fundado em 2025 por Luhnny</p>
     </footer>
 
-    <script>
-        // Inicializa os ícones do Lucide
-        lucide.createIcons();
+    <!-- MODAL: LOGIN -->
+    <div id="modal-login" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4 modal-bg">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h3 class="text-2xl font-bold text-pink-500 mb-6 flex items-center gap-2"><i data-lucide="shield-check"></i> Acesso Membro</h3>
+            <div class="space-y-4">
+                <input type="text" id="login-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none" placeholder="Nick Minecraft">
+                <input type="password" id="login-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none" placeholder="Senha Secreta">
+                <button onclick="handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition">Acessar</button>
+                <button onclick="closeModal('modal-login')" class="w-full text-slate-400 text-sm py-2">Cancelar</button>
+            </div>
+        </div>
+    </div>
 
-        // Função universal para trocar de abas
+    <!-- MODAL: ADMIN (PAINEL LUHNNY) -->
+    <div id="modal-admin-event" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4 modal-bg">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-2xl font-bold text-pink-600 mb-6">Novo Evento (Líder)</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <input type="text" id="ev-title" placeholder="Título do Evento" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="text" id="ev-theme" placeholder="Tema" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="date" id="ev-date" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="text" id="ev-loc" placeholder="Local (/warp ...)" class="p-3 bg-slate-50 border rounded-xl">
+                <div class="space-y-2">
+                    <input type="text" id="ev-p1" placeholder="1º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                    <input type="text" id="ev-p2" placeholder="2º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                    <input type="text" id="ev-p3" placeholder="3º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                </div>
+            </div>
+            <textarea id="ev-rules" placeholder="Regras e Funcionamento..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6"></textarea>
+            <div class="flex gap-4">
+                <button onclick="createEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl">Publicar</button>
+                <button onclick="closeModal('modal-admin-event')" class="px-4 text-slate-400">Voltar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
         function switchTab(tab) {
-            const tabs = ['apresentacao', 'membros', 'eventos'];
-            
-            tabs.forEach(t => {
-                const tabElement = document.getElementById('tab-' + t);
-                const btnElement = document.getElementById('btn-' + t);
-                
+            ['apresentacao', 'membros', 'eventos'].forEach(t => {
+                const el = document.getElementById('tab-' + t);
+                const btn = document.getElementById('btn-' + t);
                 if (t === tab) {
-                    tabElement.classList.remove('hidden');
-                    btnElement.classList.add('tab-active');
-                    btnElement.classList.remove('text-pink-300');
+                    el.classList.remove('hidden');
+                    btn.classList.add('tab-active');
+                    btn.classList.remove('text-pink-300');
                 } else {
-                    tabElement.classList.add('hidden');
-                    btnElement.classList.remove('tab-active');
-                    btnElement.classList.add('text-pink-300');
+                    el.classList.add('hidden');
+                    btn.classList.remove('tab-active');
+                    btn.classList.add('text-pink-300');
                 }
             });
-            
             lucide.createIcons();
         }
     </script>
