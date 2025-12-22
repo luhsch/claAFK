@@ -45,29 +45,18 @@
         const ADMIN_PASSWORD = "sp3k22m31"; 
         const ADMIN_NAME = "Luhnny";
 
-        const init = async () => {
-            try {
-                await signInAnonymously(auth);
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        listenToEvents();
-                        checkSession();
-                    }
-                });
-            } catch (e) { console.error(e); }
-        };
-
+        // --- SISTEMA DE LOGIN ---
         window.handleLogin = () => {
-            const user = document.getElementById('login-user').value.trim();
-            const pass = document.getElementById('login-pass').value;
-            if (!user) return notify("Digite seu nick!", "error");
+            const userIn = document.getElementById('login-user').value.trim();
+            const passIn = document.getElementById('login-pass').value;
+            if (!userIn) return notify("Digita o teu nick!", "error");
 
-            if (user === ADMIN_NAME && pass === ADMIN_PASSWORD) {
-                loginSuccess(user, true);
-            } else if (pass === CLAN_PASSWORD) {
-                loginSuccess(user, false);
+            if (userIn.toLowerCase() === ADMIN_NAME.toLowerCase() && passIn === ADMIN_PASSWORD) {
+                loginSuccess(ADMIN_NAME, true);
+            } else if (passIn === CLAN_PASSWORD) {
+                loginSuccess(userIn, false);
             } else {
-                notify("Senha incorreta!", "error");
+                notify("Senha ou nick incorretos!", "error");
             }
         };
 
@@ -79,17 +68,17 @@
             closeModal('modal-login');
         }
 
-        function checkSession() {
-            const saved = localStorage.getItem('afk_user');
-            if (saved) { currentUser = JSON.parse(saved); updateUI(); }
-        }
-
         window.logout = () => {
             currentUser = null;
             localStorage.removeItem('afk_user');
             updateUI();
-            notify("Você saiu.", "info");
+            notify("Sessão encerrada.", "info");
         };
+
+        function checkSession() {
+            const saved = localStorage.getItem('afk_user');
+            if (saved) { currentUser = JSON.parse(saved); updateUI(); }
+        }
 
         function updateUI() {
             const loginBtn = document.getElementById('btn-login-trigger');
@@ -108,63 +97,96 @@
             renderEvents();
         }
 
+        // --- GESTÃO DE EVENTOS ---
         function listenToEvents() {
             const q = collection(db, 'artifacts', appId, 'public', 'data', 'events');
             onSnapshot(q, (snapshot) => {
                 allEvents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderEvents();
             }, (err) => {
+                console.error("Firestore Error:", err);
                 if (err.code === 'permission-denied') notify("Erro de Rules no Firebase!", "error");
             });
         }
 
         window.createEvent = async () => {
-            if (!currentUser || !currentUser.isAdmin) return;
+            if (!currentUser) return notify("Faz login primeiro!", "error");
+            if (!currentUser.isAdmin) return notify("Apenas a Luhnny pode criar eventos!", "error");
+
             const newEvent = {
                 title: document.getElementById('ev-title').value || "Novo Evento",
                 date: document.getElementById('ev-date').value || "A definir",
                 time: document.getElementById('ev-time').value || "A definir",
                 location: document.getElementById('ev-loc').value || "bawmc.net",
                 theme: document.getElementById('ev-theme').value || "Geral",
-                prizes: [document.getElementById('ev-p1').value || "?", document.getElementById('ev-p2').value || "?", document.getElementById('ev-p3').value || "?"],
+                prizes: [
+                    document.getElementById('ev-p1').value || "?", 
+                    document.getElementById('ev-p2').value || "?", 
+                    document.getElementById('ev-p3').value || "?"
+                ],
                 rules: document.getElementById('ev-rules').value || "Regras em breve...",
                 status: 'active',
                 participants: [],
                 createdAt: Date.now()
             };
+
             try {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), newEvent);
-                notify("Evento criado!", "success");
+                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'events');
+                await addDoc(colRef, newEvent);
+                notify("Evento publicado com sucesso!", "success");
                 closeModal('modal-admin-event');
-            } catch (e) { notify("Erro ao salvar no Firestore.", "error"); }
+            } catch (e) { 
+                console.error("Error creating event:", e);
+                notify("Erro ao gravar. Verifica as Rules no Firestore!", "error"); 
+            }
         };
 
         window.toggleEventStatus = async (id, currentStatus) => {
-            const newStatus = currentStatus === 'active' ? 'ended' : 'active';
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: newStatus });
+            try {
+                const newStatus = currentStatus === 'active' ? 'ended' : 'active';
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: newStatus });
+                notify(newStatus === 'ended' ? "Evento encerrado!" : "Evento reativado!", "info");
+            } catch (e) { notify("Erro ao mudar status.", "error"); }
         };
 
         window.deleteEvent = async (id) => {
-            if(confirm("Excluir evento permanentemente?")) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id));
+            if(confirm("Eliminar evento permanentemente?")) {
+                try {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id));
+                    notify("Evento eliminado.", "info");
+                } catch(e) { notify("Erro ao eliminar.", "error"); }
+            }
         };
 
         window.participate = async (eventId) => {
             if (!currentUser) return openModal('modal-login');
             const event = allEvents.find(e => e.id === eventId);
-            if (event.participants.includes(currentUser.name)) return notify("Já inscrito!", "info");
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId), { participants: [...event.participants, currentUser.name] });
-            notify("Inscrição confirmada!", "success");
+            if (event.participants.includes(currentUser.name)) return notify("Já estás inscrito!", "info");
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventId), { 
+                    participants: [...event.participants, currentUser.name] 
+                });
+                notify("Inscrição confirmada!", "success");
+            } catch(e) { notify("Erro ao inscrever.", "error"); }
         };
 
         function renderEvents() {
             const activeContainer = document.getElementById('active-events-list');
             const historyContainer = document.getElementById('history-events-list');
             const noActiveMessage = document.getElementById('no-active-message');
+            
             const actives = allEvents.filter(e => e.status === 'active');
             const history = allEvents.filter(e => e.status === 'ended');
+
             activeContainer.innerHTML = ''; historyContainer.innerHTML = '';
-            actives.length === 0 ? noActiveMessage.classList.remove('hidden') : noActiveMessage.classList.add('hidden');
-            actives.forEach(ev => activeContainer.innerHTML += createEventCard(ev, true));
+            
+            if (actives.length === 0) {
+                noActiveMessage.classList.remove('hidden');
+            } else {
+                noActiveMessage.classList.add('hidden');
+                actives.forEach(ev => activeContainer.innerHTML += createEventCard(ev, true));
+            }
+            
             history.forEach(ev => historyContainer.innerHTML += createEventCard(ev, false));
             lucide.createIcons();
         }
@@ -178,6 +200,7 @@
                 </div>
                 <div class="mt-2 text-[10px] text-slate-400 font-bold uppercase text-left">Inscritos (${ev.participants.length}): ${ev.participants.join(', ') || 'Nenhum'}</div>
             ` : '';
+
             return `
                 <div class="bg-white rounded-3xl card-shadow border-2 ${isActive ? 'border-pink-200' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto">
                     <div class="flex justify-between items-start mb-4">
@@ -193,18 +216,24 @@
                         <div class="text-xs">
                             <p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p>
                             <p class="font-medium text-slate-600">🥇 ${ev.prizes[0]} | 🥈 ${ev.prizes[1]} | 🥉 ${ev.prizes[2]}</p>
-                            <p class="mt-2 font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema: ${ev.theme}</p>
+                            <p class="mt-2 font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p>
+                            <p class="font-medium text-slate-600">${ev.theme}</p>
                         </div>
                     </div>
                     <div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100 text-left">
                         <strong>Sobre:</strong> ${ev.rules}
                     </div>
-                    ${isActive ? `<button onclick="participate('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isParticipating ? 'bg-green-100 text-green-600 cursor-default' : 'pink-gradient text-white hover:shadow-lg'}"><i data-lucide="${isParticipating ? 'check-circle' : 'user-plus'}" class="w-5 h-5"></i>${isParticipating ? 'Você está inscrito!' : 'Quero Participar'}</button>` : ''}
+                    ${isActive ? `
+                        <button onclick="participate('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isParticipating ? 'bg-green-100 text-green-600 cursor-default' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}">
+                            <i data-lucide="${isParticipating ? 'check-circle' : 'user-plus'}" class="w-5 h-5"></i>
+                            ${isParticipating ? 'Inscrito!' : 'Quero Participar'}
+                        </button>` : ''}
                     ${adminControls}
                 </div>
             `;
         }
 
+        // --- INICIALIZAÇÃO E UTILITÁRIOS ---
         window.openModal = (id) => document.getElementById(id).classList.remove('hidden');
         window.closeModal = (id) => document.getElementById(id).classList.add('hidden');
         window.switchTab = (tab) => {
@@ -220,17 +249,26 @@
         function notify(msg, type) {
             const toast = document.getElementById('toast');
             toast.innerText = msg;
-            toast.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-white font-bold shadow-2xl transition-all z-[200] ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-pink-500'}`;
-            toast.style.display = 'block'; setTimeout(() => toast.style.display = 'none', 3000);
+            toast.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-white font-bold shadow-2xl transition-all z-[250] ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-pink-500'}`;
+            toast.style.display = 'block'; 
+            setTimeout(() => toast.style.display = 'none', 5000);
         }
 
-        init();
+        onAuthStateChanged(auth, async (user) => {
+            if (!user) {
+                try { await signInAnonymously(auth); } catch (e) { console.error(e); }
+            }
+            listenToEvents();
+            checkSession();
+            lucide.createIcons();
+        });
     </script>
 </head>
 <body class="min-h-screen text-slate-800 pb-20">
 
     <div id="toast" style="display:none"></div>
 
+    <!-- Cabeçalho -->
     <header class="py-16 px-4 text-center pink-gradient text-white shadow-lg mb-6 relative overflow-hidden">
         <div class="absolute top-6 right-6 md:top-8 md:right-12 recruitment-badge">
             <div class="bg-white text-pink-600 px-5 py-2 rounded-2xl text-xs font-bold uppercase tracking-widest border-2 border-pink-200 shadow-2xl flex items-center gap-2">
@@ -246,7 +284,7 @@
             </button>
             <div id="user-logged-in" class="hidden bg-white/20 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-sm flex items-center gap-3">
                 <span>Olá, <strong id="logged-name"></strong></span>
-                <button onclick="logout()" class="hover:text-red-200 ml-2 font-bold uppercase text-[10px]">Sair</button>
+                <button onclick="logout()" class="hover:text-red-200 transition font-bold ml-2 uppercase text-[10px]">Sair</button>
             </div>
         </div>
     </header>
@@ -284,58 +322,83 @@
 
         <!-- SEÇÃO MEMBROS -->
         <div id="tab-membros" class="hidden">
-            <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">Membros Ativos</h2>
                 <div class="text-sm text-pink-400/70 italic">Total: 17 membros registrados</div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <!-- Luhnny -->
+                <!-- Membro: Luhnny -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform">
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3>
-                        <div class="relative"><img src="luhnny.png" alt="Luhnny" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"><div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm border border-white"><i data-lucide="star" class="w-4 h-4"></i></div></div>
+                        <div class="relative">
+                            <img src="luhnny.png" alt="Luhnny" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm">
+                            <div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm border border-white"><i data-lucide="star" class="w-4 h-4"></i></div>
+                        </div>
                     </div>
-                    <div class="space-y-3 mb-6 flex-grow text-sm text-left"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/10</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Manhã e Noite</span></div></div>
-                    <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">Líder</span><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div>
+                    <div class="space-y-3 mb-6 flex-grow text-sm text-left">
+                        <div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/10</span></div>
+                        <div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Manhã e Noite</span></div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
+                        <span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">Líder</span>
+                        <span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span>
+                    </div>
                 </div>
+
                 <!-- K0ssh1_ -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
-                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
+                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" alt="K0ssh1_" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     <div class="space-y-3 mb-6 flex-grow text-sm text-left"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 27/04</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 13:30 - 01:30</span></div></div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
                 </div>
+
                 <!-- Lagartuuuxaaa -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col">
-                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="lagartuuuxaaa.png" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
+                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="lagartuuuxaaa.png" alt="Lagartuuuxaaa" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     <div class="space-y-3 mb-6 flex-grow text-sm text-left"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 01/07</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 22h - 02h</span></div></div>
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
                 </div>
+
                 <!-- baiano019 -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 14/05<br>Disponível: Noite</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
+                
                 <!-- Raitzz_ -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: Tarde e Manhã</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] font-bold uppercase rounded-full">farm</span></div></div>
+                
                 <!-- Invisivel -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 28/07<br>Disponível: Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- NeverPuzzle -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 11/08<br>Disponível: Tarde</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- Pardas01 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 16/06<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" alt="Pardas01" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 16/06<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- chorapropai -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 10/01<br>Disponível: Variável</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- felpipoca -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 21/01<br>Disponível: Dia e Madrugada</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- 1aswd -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 19/09<br>Disponível: Dia todo</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
+                
                 <!-- ynSunn -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 23/08<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- labubusista -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 17/02<br>Disponível: Quase sempre</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- iaruchy -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 18/04<br>Disponível: N/A</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
+                
                 <!-- TheP1nk -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 10/07<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- 2aswd -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 20/05<br>Disponível: Toda hora</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                
                 <!-- _Vzkls14 -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-left text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: 02h-21h</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
             </div>
@@ -346,16 +409,16 @@
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 <div class="text-left">
                     <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2"><i data-lucide="calendar-heart"></i> Cronograma de Eventos</h2>
-                    <p class="text-pink-300 text-sm italic">Faça login para participar!</p>
+                    <p class="text-pink-300 text-sm italic">Entra para participares nos eventos do clã!</p>
                 </div>
                 <button id="admin-event-panel" onclick="openModal('modal-admin-event')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2">
-                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Criar Novo Evento
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Publicar Novo Evento
                 </button>
             </div>
             <div id="active-events-list"></div>
             <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
                 <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3>
-                <p class="text-slate-500 text-lg">Fique de olho nas novidades!</p>
+                <p class="text-slate-500 text-lg">Fica de olho nas novidades da Luhnny!</p>
             </div>
             <div class="mt-16 border-t border-pink-100 pt-10">
                 <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 text-left"><i data-lucide="history" class="w-5 h-5"></i> Histórico de Eventos</h3>
@@ -381,7 +444,7 @@
 
     <div id="modal-admin-event" class="hidden fixed inset-0 z-[210] flex items-center justify-center p-4 modal-bg">
         <div class="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto text-left">
-            <h3 class="text-2xl font-bold text-pink-600 mb-6">Configurar Evento</h3>
+            <h3 class="text-2xl font-bold text-pink-600 mb-6">Criar Evento (Líder)</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <input type="text" id="ev-title" placeholder="Título do Evento" class="p-3 bg-slate-50 border rounded-xl">
                 <input type="text" id="ev-theme" placeholder="Tema" class="p-3 bg-slate-50 border rounded-xl">
@@ -396,7 +459,7 @@
             </div>
             <textarea id="ev-rules" placeholder="Regras e Funcionamento..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6"></textarea>
             <div class="flex gap-4">
-                <button onclick="createEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg">Publicar Evento</button>
+                <button onclick="createEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg">Publicar Agora</button>
                 <button onclick="closeModal('modal-admin-event')" class="px-4 text-slate-400">Voltar</button>
             </div>
         </div>
