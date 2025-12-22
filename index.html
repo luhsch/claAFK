@@ -41,7 +41,7 @@
         let currentUser = null;
         let allEvents = [];
         let editingEventId = null;
-        let eventToDeleteId = null; 
+        let eventToDeleteId = null; // Para o novo modal de exclusão
         
         const CLAN_PASSWORD = "2v2nt4"; 
         const ADMIN_PASSWORD = "sp3k22m31"; 
@@ -60,19 +60,6 @@
                 loginSuccess(nick, false);
             } else {
                 notify("Nick ou senha incorretos!", "error");
-            }
-        };
-
-        // Lógica de navegação por setas e Enter
-        window.handleKeyNavigation = (event, nextId, prevId = null) => {
-            if (event.key === "ArrowDown") {
-                event.preventDefault();
-                if (nextId) document.getElementById(nextId)?.focus();
-            } else if (event.key === "ArrowUp" && prevId) {
-                event.preventDefault();
-                document.getElementById(prevId)?.focus();
-            } else if (event.key === "Enter" && event.target.id.includes('login')) {
-                handleLogin();
             }
         };
 
@@ -142,6 +129,7 @@
             notify(next === 'ended' ? "Encerrado!" : "Reativado!", "info");
         };
 
+        // NOVO: Sistema de exclusão sem confirm() nativo
         window.requestDeleteEvent = (id) => {
             eventToDeleteId = id;
             openModal('modal-confirm-delete');
@@ -200,7 +188,7 @@
 
         function listenToEvents() {
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (snap) => {
-                allEvents = snap.docs.map(d => ({ id: d.id, ...doc.data() || d.data() }));
+                allEvents = snap.docs.map(d => ({ id: d.id, ...d.data() }));
                 renderEvents();
             }, (err) => { if(err.code === 'permission-denied') notify("Revisa as Rules do Firebase!", "error"); });
         }
@@ -208,11 +196,10 @@
         function renderEvents() {
             const actContainer = document.getElementById('active-events-list');
             const histContainer = document.getElementById('history-events-list');
-            const noActiveMessage = document.getElementById('no-active-message');
             const actives = allEvents.filter(e => e.status === 'active');
             const history = allEvents.filter(e => e.status === 'ended');
             actContainer.innerHTML = ''; histContainer.innerHTML = '';
-            actives.length === 0 ? noActiveMessage.classList.remove('hidden') : noActiveMessage.classList.add('hidden');
+            actives.length === 0 ? document.getElementById('no-active-message').classList.remove('hidden') : document.getElementById('no-active-message').classList.add('hidden');
             actives.forEach(ev => actContainer.innerHTML += createEventCard(ev, true));
             history.forEach(ev => histContainer.innerHTML += createEventCard(ev, false));
             lucide.createIcons();
@@ -309,7 +296,7 @@
     </nav>
 
     <main class="max-w-6xl mx-auto px-6">
-        <!-- SEÇÃO APRESENTAÇÃO (MANTIDA INTEGRAL) -->
+        <!-- SEÇÃO APRESENTAÇÃO -->
         <div id="tab-apresentacao">
             <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center">
                 <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
@@ -323,7 +310,7 @@
             </div>
         </div>
 
-        <!-- SEÇÃO MEMBROS (MANTIDA INTEGRAL - 17 MEMBROS) -->
+        <!-- SEÇÃO MEMBROS -->
         <div id="tab-membros" class="hidden">
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2">Membros Ativos</h2>
@@ -340,7 +327,7 @@
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left">
                     <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div>
                     <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 27/04</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 13:30 - 01:30</span></div></div>
-                    <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
+                    <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
                 </div>
                 <!-- Lagartuuuxaaa -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left">
@@ -348,33 +335,20 @@
                     <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 01/07</span></div><div class="flex items-center gap-3"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 22h - 02h</span></div></div>
                     <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] font-bold uppercase rounded-full">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div>
                 </div>
-                <!-- baiano019 -->
+                <!-- Outros Membros conforme original -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 14/05<br>Disponível: Noite</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
-                <!-- Raitzz_ -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: Tarde e Manhã</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] font-bold uppercase rounded-full">farm</span></div></div>
-                <!-- Invisivel -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 28/07<br>Disponível: Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
-                <!-- NeverPuzzle -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 11/08<br>Disponível: Tarde</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
-                <!-- Pardas01 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 16/06<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
-                <!-- chorapropai -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 10/01<br>Disponível: Variável</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
-                <!-- felpipoca -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 28/07<br>Disponível: Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 11/08<br>Disponível: Tarde</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 16/06<br>Disponível: Tarde e Noite</p><div class="flex flex-wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 10/01<br>Disponível: Variável</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 21/01<br>Disponível: Dia e Madrugada</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
-                <!-- 1aswd -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 19/09<br>Disponível: Dia todo</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
-                <!-- ynSunn -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 23/08<br>Disponível: Tarde e Noite</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
-                <!-- labubusista -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 17/02<br>Disponível: Quase sempre</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
-                <!-- iaruchy -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 17/02<br>Disponível: Quase sempre</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 18/04<br>Disponível: N/A</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
-                <!-- TheP1nk -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 10/07<br>Disponível: Tarde e Noite</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span></div></div>
-                <!-- 2aswd -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 10/07<br>Disponível: Tarde e Noite</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 20/05<br>Disponível: Toda hora</p><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full">farm</span></div></div>
-                <!-- _Vzkls14 -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col text-left"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><p class="text-sm text-slate-500 mb-6 flex-grow">Aniversário: 22/03<br>Disponível: 02h-21h</p><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
             </div>
         </div>
@@ -401,20 +375,20 @@
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
             <h3 class="text-2xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-2"><i data-lucide="shield-check"></i> Identidade AFK</h3>
             <div class="space-y-4">
-                <input type="text" id="login-user" onkeydown="handleKeyNavigation(event, 'login-pass')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick Minecraft">
-                <input type="password" id="login-pass" onkeydown="handleKeyNavigation(event, null, 'login-user')" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha Secreta">
+                <input type="text" id="login-user" onkeydown="if(event.key === 'Enter') handleLogin()" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Nick Minecraft">
+                <input type="password" id="login-pass" onkeydown="if(event.key === 'Enter') handleLogin()" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300" placeholder="Senha Secreta">
                 <button onclick="handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition">Acessar</button>
                 <button onclick="closeModal('modal-login')" class="w-full text-slate-400 text-sm py-2">Cancelar</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL CONFIRMAÇÃO EXCLUSÃO -->
+    <!-- MODAL CONFIRMAÇÃO EXCLUSÃO (NOVO) -->
     <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[300] flex items-center justify-center p-4 modal-bg text-center">
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
             <div class="text-red-500 mb-4 flex justify-center"><i data-lucide="alert-triangle" class="w-12 h-12"></i></div>
             <h3 class="text-xl font-bold text-slate-800 mb-2">Eliminar Evento?</h3>
-            <p class="text-slate-500 text-sm mb-6">Esta ação não pode ser desfeita. Todos os dados do evento serão apagados.</p>
+            <p class="text-slate-500 text-sm mb-6">Esta ação não pode ser desfeita. Todos os dados do evento e inscritos serão apagados.</p>
             <div class="flex gap-4">
                 <button onclick="confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg">Sim, Apagar</button>
                 <button onclick="closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 text-slate-500 font-bold py-3 rounded-xl">Cancelar</button>
@@ -427,18 +401,14 @@
         <div class="bg-white rounded-3xl p-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 id="modal-admin-title" class="text-2xl font-bold text-pink-600 mb-6">Criar Evento</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <input type="text" id="ev-title" onkeydown="handleKeyNavigation(event, 'ev-theme')" placeholder="Título do Evento" class="p-3 bg-slate-50 border rounded-xl outline-none">
-                <input type="text" id="ev-theme" onkeydown="handleKeyNavigation(event, 'ev-date', 'ev-title')" placeholder="Tema" class="p-3 bg-slate-50 border rounded-xl outline-none">
-                <input type="date" id="ev-date" onkeydown="handleKeyNavigation(event, 'ev-time', 'ev-theme')" class="p-3 bg-slate-50 border rounded-xl">
-                <input type="time" id="ev-time" onkeydown="handleKeyNavigation(event, 'ev-loc', 'ev-date')" class="p-3 bg-slate-50 border rounded-xl">
-                <input type="text" id="ev-loc" onkeydown="handleKeyNavigation(event, 'ev-p1', 'ev-time')" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl outline-none">
-                <div class="space-y-2">
-                    <input type="text" id="ev-p1" onkeydown="handleKeyNavigation(event, 'ev-p2', 'ev-loc')" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm">
-                    <input type="text" id="ev-p2" onkeydown="handleKeyNavigation(event, 'ev-p3', 'ev-p1')" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm">
-                    <input type="text" id="ev-p3" onkeydown="handleKeyNavigation(event, 'ev-rules', 'ev-p2')" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm">
-                </div>
+                <input type="text" id="ev-title" placeholder="Título do Evento" class="p-3 bg-slate-50 border rounded-xl outline-none">
+                <input type="text" id="ev-theme" placeholder="Tema" class="p-3 bg-slate-50 border rounded-xl outline-none">
+                <input type="date" id="ev-date" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl">
+                <input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl outline-none">
+                <div class="space-y-2"><input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm"></div>
             </div>
-            <textarea id="ev-rules" onkeydown="handleKeyNavigation(event, 'btn-publish-trigger', 'ev-p3')" placeholder="Sobre o evento..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 outline-none"></textarea>
+            <textarea id="ev-rules" placeholder="Sobre o evento..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 outline-none"></textarea>
             <div class="flex gap-4"><button id="btn-publish-trigger" onclick="publishClanEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg">Publicar Agora</button><button onclick="closeModal('modal-admin-event')" class="px-4 text-slate-400 font-medium">Voltar</button></div>
         </div>
     </div>
