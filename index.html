@@ -15,7 +15,9 @@
         .login-tab-active { border-bottom: 2px solid #db2777; color: #db2777; font-weight: 700; }
         .hidden { display: none; }
         @keyframes subtle-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.9; } }
+        @keyframes attention-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); transform: scale(1); } 50% { transform: scale(1.05); } 70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); transform: scale(1); } }
         .recruitment-badge { animation: subtle-pulse 3s infinite ease-in-out; }
+        .btn-attention { animation: attention-pulse 2s infinite; }
         .modal-bg { background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
     </style>
 
@@ -52,12 +54,11 @@
         let allianceToDeleteId = null;
         let applicationToDeleteId = null;
         
+        const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
         const CLAN_PASSWORD = "senhadificil"; 
         const ADMIN_PASSWORD = "sp3k22m31"; 
         const SUB_ADMIN_PASSWORD = "senhamegadificil"; 
         const ALLY_PASSWORD = "123alianca";
-        
-        const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
 
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
@@ -142,11 +143,8 @@
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('btn-' + t);
                 if (!el || !btn) return;
-                if (t === tab) { 
-                    el.classList.remove('hidden'); btn.classList.add('tab-active'); btn.classList.remove('text-pink-300'); 
-                } else { 
-                    el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('text-pink-300'); 
-                }
+                if (t === tab) { el.classList.remove('hidden'); btn.classList.add('tab-active'); btn.classList.remove('text-pink-300'); } 
+                else { el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('text-pink-300'); }
             });
             lucide.createIcons();
         };
@@ -166,55 +164,224 @@
             }
         };
 
-        window.handleKeyNav = (event, nextId, prevId, isLast) => {
-            if (event.key === "ArrowDown" && nextId) {
-                event.preventDefault();
-                document.getElementById(nextId)?.focus();
-            } else if (event.key === "ArrowUp" && prevId) {
-                event.preventDefault();
-                document.getElementById(prevId)?.focus();
-            } else if (event.key === "Enter") {
-                event.preventDefault();
-                if (isLast) {
-                    if (event.target.id.includes('afk')) window.handleLoginAFK();
-                    else window.handleLoginAlly();
-                } else if (nextId) {
-                    document.getElementById(nextId)?.focus();
-                }
+        // --- GESTÃO DE EVENTOS ---
+        window.createEventCard = function(ev, type) {
+            const isP = currentUser && (ev.participants || []).includes(currentUser.name);
+            let controls = '';
+            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            const pCount = (ev.participants || []).length;
+            
+            const creditText = (ev.suggestedBy && !ADMINS_LIST.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
+            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+            const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
+            
+            if (isAdmin) {
+                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
+                else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
+            } else if (currentUser && !currentUser.isAlly && (type === 'active' || type === 'history')) {
+                controls = pList;
             }
+
+            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]">
+                <div class="flex justify-between items-start mb-1">
+                    <h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3>
+                    <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span>
+                </div>
+                ${creditText}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4">
+                    <div class="space-y-2">
+                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p>
+                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p>
+                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p>
+                    </div>
+                    <div class="space-y-2">
+                        ${prizeDisplay}
+                        <div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div>
+                    </div>
+                </div>
+                <div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>
+                ${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}
+                ${controls}
+            </div>`;
         };
 
-        window.renderUserStatus = function() {
-            const myNick = localStorage.getItem('afk_rec_nick');
-            const div = document.getElementById('user-status-display');
-            if (!myNick) return div?.classList.add('hidden');
-            const found = allApplications.find(a => a.nick.toLowerCase() === myNick.toLowerCase());
-            if (found) {
-                div.classList.remove('hidden');
-                const colors = { pendente: 'bg-yellow-100 text-yellow-700', aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700' };
-                const icons = { pendente: 'clock', aprovado: 'check-circle', negado: 'x-circle' };
-                div.innerHTML = `<div class="p-6 bg-white rounded-2xl border-2 border-pink-100 card-shadow flex items-center justify-between"><div class="flex items-center gap-4"><div class="p-3 ${colors[found.status]} rounded-full"><i data-lucide="${icons[found.status]}"></i></div><div><p class="text-[10px] font-bold uppercase opacity-50">Candidatura (${found.nick}):</p><p class="text-lg font-bold uppercase tracking-widest">${found.status}</p></div></div><button onclick="localStorage.removeItem('afk_rec_nick'); window.renderUserStatus();" class="text-xs font-bold text-slate-300">LIMPAR</button></div>`;
-                lucide.createIcons();
-            } else div?.classList.add('hidden');
+        window.renderEvents = function() {
+            const actC = document.getElementById('active-events-list'); 
+            const histC = document.getElementById('history-events-list'); 
+            const suggC = document.getElementById('suggested-events-list');
+            const suggS = document.getElementById('suggestions-section');
+            if(!actC) return;
+            actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
+
+            const actives = allEvents.filter(e => e.status === 'active');
+            const history = allEvents.filter(e => e.status === 'ended');
+            const suggestions = allEvents.filter(e => e.status === 'suggestion');
+
+            if (currentUser && ADMINS_LIST.includes(currentUser.name) && suggestions.length > 0) {
+                suggS?.classList.remove('hidden');
+                suggestions.forEach(ev => suggC.innerHTML += window.createEventCard(ev, 'suggestion'));
+            } else suggS?.classList.add('hidden');
+
+            if (actives.length === 0) document.getElementById('no-active-message')?.classList.remove('hidden');
+            else {
+                document.getElementById('no-active-message')?.classList.add('hidden');
+                actives.forEach(ev => actC.innerHTML += window.createEventCard(ev, 'active'));
+            }
+
+            if(histC) history.forEach(ev => histC.innerHTML += window.createEventCard(ev, 'history'));
+            lucide.createIcons();
         };
 
-        window.populateAllySelect = function() {
-            const s = document.getElementById('login-ally-clan'); if(!s) return;
-            let h = '<option value="">Selecionar clã</option><option value="C0RV0S">C0RV0S (CR0W)</option><option value="Tenebris">Tenebris (TNB)</option>';
-            allAlliances.forEach(a => { if(a.name!=="C0RV0S" && a.name!=="Tenebris") h += `<option value="${a.name}">${a.name} (${a.tag})</option>`; });
-            s.innerHTML = h;
+        window.publishClanEvent = async () => {
+            const isAdmin = ADMINS_LIST.includes(currentUser.name);
+            const data = {
+                title: document.getElementById('ev-title').value,
+                theme: document.getElementById('ev-theme').value,
+                date: document.getElementById('ev-date').value,
+                time: document.getElementById('ev-time').value,
+                location: document.getElementById('ev-loc').value || "Servidor bawMC",
+                prizes: [document.getElementById('ev-p1').value, document.getElementById('ev-p2').value, document.getElementById('ev-p3').value],
+                rules: document.getElementById('ev-rules').value,
+                status: isAdmin ? 'active' : 'suggestion',
+                suggestedBy: currentUser.name,
+                participants: [],
+                createdAt: Date.now()
+            };
+            if (editingEventId) {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data);
+                editingEventId = null;
+            } else {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data);
+            }
+            window.closeModal('modal-admin-event');
+            window.notify(isAdmin ? "Evento Publicado!" : "Sugestão enviada para Luhnny!", "success");
+        };
+
+        window.approveClanEvent = async (id) => {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: 'active' });
+            window.notify("Evento aprovado!", "success");
+        };
+
+        window.updateClanEventStatus = async (id, current) => {
+            const next = current === 'active' ? 'ended' : 'active';
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: next });
+        };
+
+        window.toggleClanParticipation = async (id) => {
+            const ev = allEvents.find(e => e.id === id);
+            const p = ev.participants || [];
+            const next = p.includes(currentUser.name) ? p.filter(x => x !== currentUser.name) : [...p, currentUser.name];
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { participants: next });
+        };
+
+        window.requestDeleteEvent = (id) => { eventToDeleteId = id; window.openModal('modal-confirm-delete'); };
+        window.confirmDelete = async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId)); window.closeModal('modal-confirm-delete'); };
+
+        window.editClanEvent = (id) => {
+            const ev = allEvents.find(e => e.id === id);
+            editingEventId = id;
+            document.getElementById('ev-title').value = ev.title;
+            document.getElementById('ev-theme').value = ev.theme;
+            document.getElementById('ev-date').value = ev.date;
+            document.getElementById('ev-time').value = ev.time || '';
+            document.getElementById('ev-loc').value = ev.location;
+            document.getElementById('ev-p1').value = ev.prizes?.[0] || '';
+            document.getElementById('ev-p2').value = ev.prizes?.[1] || '';
+            document.getElementById('ev-p3').value = ev.prizes?.[2] || '';
+            document.getElementById('ev-rules').value = ev.rules;
+            window.openModal('modal-admin-event');
+        };
+
+        // --- GESTÃO DE ALIANÇAS ---
+        window.publishClanAlliance = async () => {
+            const name = document.getElementById('ali-name').value;
+            const tag = document.getElementById('ali-tag').value;
+            const isAdmin = ADMINS_LIST.includes(currentUser.name);
+            if(isAdmin) {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() });
+                window.notify("Aliança criada!", "success");
+            } else {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() });
+                window.notify("Solicitação enviada!", "success");
+            }
+            window.closeModal('modal-admin-alliance');
+        };
+
+        window.approveAllianceRequest = async (id, d) => { 
+            if (currentUser.name !== "Luhnny") return; 
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: d.name, tag: d.tag, members: [], createdAt: Date.now() }); 
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); 
+        };
+        window.rejectAllianceRequest = async (id) => { 
+            if (currentUser.name !== "Luhnny") return; 
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); 
+        };
+        window.removeAllyMember = async (id, n) => { 
+            const a = allAlliances.find(x => x.id === id); 
+            if(a) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); 
+        };
+        window.deleteIdentity = async (n) => { 
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); 
+            window.notify("Vínculo removido.", "info"); 
+        };
+        window.requestDeleteAlliance = (id) => { allianceToDeleteId = id; window.openModal('modal-confirm-alliance-delete'); };
+        window.confirmAllianceDelete = async () => { 
+            if (!allianceToDeleteId) return; 
+            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId)); 
+            window.closeModal('modal-confirm-alliance-delete'); 
+        };
+
+        window.renderIdentities = function() {
+            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            
+            // Ally Identities Section (in Alianças tab)
+            const allyIdenC = document.getElementById('ally-identities-section');
+            const allyIdenL = document.getElementById('ally-identities-list');
+            
+            // Member Identities Section (in Membros tab)
+            const memIdenC = document.getElementById('member-identities-section');
+            const memIdenL = document.getElementById('member-identities-list');
+
+            if (isAdmin) {
+                const members = allIdentities.filter(i => ALLOWED_MEMBERS.some(m => m.toLowerCase() === i.nick.toLowerCase()));
+                const allies = allIdentities.filter(i => !ALLOWED_MEMBERS.some(m => m.toLowerCase() === i.nick.toLowerCase()));
+
+                if (allyIdenC && allyIdenL) {
+                    allyIdenC.classList.remove('hidden');
+                    allyIdenL.innerHTML = '';
+                    if (allies.length === 0) allyIdenL.innerHTML = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>';
+                    else {
+                        allies.forEach(i => {
+                            allyIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick}</span><button onclick="window.deleteIdentity('${i.nick.toLowerCase()}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="unlink" class="w-4 h-4"></i></button></div>`;
+                        });
+                    }
+                }
+
+                if (memIdenC && memIdenL) {
+                    memIdenC.classList.remove('hidden');
+                    memIdenL.innerHTML = '';
+                    if (members.length === 0) memIdenL.innerHTML = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>';
+                    else {
+                        members.forEach(i => {
+                            memIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick}</span><button onclick="window.deleteIdentity('${i.nick.toLowerCase()}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="unlink" class="w-4 h-4"></i></button></div>`;
+                        });
+                    }
+                }
+            } else {
+                if(allyIdenC) allyIdenC.classList.add('hidden');
+                if(memIdenC) memIdenC.classList.add('hidden');
+            }
         };
 
         window.renderAlliances = function() {
             const c = document.getElementById('alliances-list'); if (!c) return;
             const reqC = document.getElementById('alliance-requests-section');
             const reqL = document.getElementById('alliance-requests-list');
-            const idenC = document.getElementById('identities-section');
-            const idenL = document.getElementById('identities-list');
             const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
             c.innerHTML = '';
+            
             if (allAlliances.length === 0) {
-                c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase tracking-widest text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`;
+                c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`;
             } else {
                 allAlliances.forEach(a => {
                     const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join('');
@@ -228,35 +395,26 @@
                 });
             } else reqC?.classList.add('hidden');
 
-            if (isAdmin && allIdentities.length > 0) {
-                idenC.classList.remove('hidden'); idenL.innerHTML = '';
-                allIdentities.forEach(i => {
-                    idenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick}</span><button onclick="window.deleteIdentity('${i.nick.toLowerCase()}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="unlink" class="w-4 h-4"></i></button></div>`;
-                });
-            } else idenC?.classList.add('hidden');
+            window.renderIdentities();
         };
 
-        window.createEventCard = function(ev, type) {
-            const isP = currentUser && ev.participants.includes(currentUser.name);
-            let controls = '';
-            const creditText = (ev.suggestedBy && !ADMINS_LIST.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
-            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${ev.participants.length}):</span><div class="flex flex-wrap gap-2">${ev.participants.length > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
-            const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
-            if (currentUser && ADMINS_LIST.includes(currentUser.name)) {
-                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
-                else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
-            } else if (currentUser && (type === 'active' || type === 'history')) controls = pList;
-            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
+        // --- RECRUTAMENTO ---
+        window.updateApplicationStatus = async (id, status) => {
+            if (!currentUser || !ADMINS_LIST.includes(currentUser.name)) return;
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), {
+                status: status,
+                handledBy: currentUser.name
+            });
+            window.notify(`Pedido ${status}!`, "success");
         };
 
-        window.renderEvents = function() {
-            const actC = document.getElementById('active-events-list'); const histC = document.getElementById('history-events-list'); const suggC = document.getElementById('suggested-events-list');
-            const suggS = document.getElementById('suggestions-section'); const noAct = document.getElementById('no-active-message');
-            const actives = allEvents.filter(e => e.status === 'active'); const history = allEvents.filter(e => e.status === 'ended'); const suggestions = allEvents.filter(e => e.status === 'suggestion');
-            if(actC) actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
-            if (currentUser && ADMINS_LIST.includes(currentUser.name) && suggestions.length > 0) { suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createEventCard(ev, 'suggestion')); } else suggS?.classList.add('hidden');
-            if (actives.length === 0) noAct?.classList.remove('hidden'); else { noAct?.classList.add('hidden'); actives.forEach(ev => actC.innerHTML += window.createEventCard(ev, 'active')); }
-            history.forEach(ev => histC.innerHTML += window.createEventCard(ev, 'history'));
+        window.requestDeleteApplication = (id) => { applicationToDeleteId = id; window.openModal('modal-confirm-rec-delete'); };
+        window.confirmRecDelete = async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.closeModal('modal-confirm-rec-delete'); window.notify("Candidatura removida.", "success"); };
+
+        window.toggleRecruitmentStatus = async () => {
+            if (currentUser?.name !== "Luhnny") return;
+            const newStatus = !isRecruitmentOpen;
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), { isOpen: newStatus });
         };
 
         window.renderAdminApplications = function() {
@@ -266,17 +424,20 @@
             else {
                 allApplications.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => {
                     const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' };
-                    const decisor = app.handledBy ? `<p class="text-pink-400 font-bold mt-2 border-t pt-2">Decidido por: ${app.handledBy}</p>` : '';
-                    c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-[10px] text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div>${decisor}<div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-green-600 transition">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-[10px] hover:bg-red-600 transition">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`;
+                    const decisor = app.handledBy ? `<div class="mt-4 pt-2 border-t text-[11px] font-bold text-pink-500 uppercase">Decidido por: ${app.handledBy}</div>` : '';
+                    c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-sm text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div><div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-sm">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${decisor}</div>`;
                 });
             }
             lucide.createIcons();
         };
 
         window.updateUI = function() {
-            const lBtn = document.getElementById('btn-login-trigger'); const uDisp = document.getElementById('user-logged-in');
-            const aAllyBtn = document.getElementById('admin-alliance-panel'); const aEventBtn = document.getElementById('admin-event-panel');
+            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
             const aRecPanel = document.getElementById('admin-recruitment-section');
+            const aAllyBtn = document.getElementById('admin-alliance-panel');
+            const lBtn = document.getElementById('btn-login-trigger'); 
+            const uDisp = document.getElementById('user-logged-in');
+            const aEventBtn = document.getElementById('admin-event-panel');
             const recToggle = document.getElementById('luhnny-recruitment-toggle');
             const recFormS = document.getElementById('recruitment-form-section');
             const recClosedM = document.getElementById('recruitment-closed-message');
@@ -284,52 +445,59 @@
             if (currentUser) {
                 lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden');
                 document.getElementById('logged-name').innerText = currentUser.name;
-                const isAdmin = ADMINS_LIST.includes(currentUser.name);
-                isAdmin ? aAllyBtn?.classList.remove('hidden') : aAllyBtn?.classList.add('hidden');
                 isAdmin ? aRecPanel?.classList.remove('hidden') : aRecPanel?.classList.add('hidden');
+                isAdmin ? aAllyBtn?.classList.remove('hidden') : aAllyBtn?.classList.add('hidden');
                 !currentUser.isAlly ? aEventBtn?.classList.remove('hidden') : aEventBtn?.classList.add('hidden');
+                
                 if (isAdmin) {
                     recToggle?.classList.remove('hidden'); recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO";
                     recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`;
                 } else recToggle?.classList.add('hidden');
+
             } else {
                 lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden');
-                aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); recToggle?.classList.add('hidden');
+                aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden');
             }
+
             if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); }
             else { recFormS?.classList.add('hidden'); recClosedM?.classList.remove('hidden'); }
+
             const hBadge = document.getElementById('header-rec-badge');
             if (hBadge) {
                 hBadge.innerHTML = isRecruitmentOpen ? '<i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto' : '<i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado';
                 hBadge.className = `bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 shadow-2xl flex items-center gap-2 ${isRecruitmentOpen ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`;
             }
-            window.renderUserStatus(); window.renderAlliances(); window.renderEvents(); window.renderAdminApplications();
+
+            window.renderAdminApplications(); 
+            window.renderAlliances(); 
+            window.renderEvents();
+            window.renderIdentities();
             lucide.createIcons();
         };
 
         window.submitRecruitment = async () => {
             if (!isRecruitmentOpen) return;
-            const nick = document.getElementById('rec-nick').value.trim();
-            const discord = document.getElementById('rec-discord').value.trim();
             const data = {
-                nick, discord, idade: document.getElementById('rec-idade').value, tempo: document.getElementById('rec-tempo').value,
-                clas: document.getElementById('rec-clas').value, combate: document.getElementById('rec-combate').value, build: document.getElementById('rec-build').value, farm: document.getElementById('rec-farm').value,
-                voice: document.getElementById('rec-voice').value, plataforma: document.getElementById('rec-plat').value, rank: document.getElementById('rec-rank').value,
-                horarios: document.getElementById('rec-horarios').value || "N/I", aniversario: document.getElementById('rec-aniv').value || "N/I", status: 'pendente', createdAt: Date.now()
+                nick: document.getElementById('rec-nick').value.trim(),
+                discord: document.getElementById('rec-discord').value.trim(),
+                idade: document.getElementById('rec-idade').value,
+                tempo: document.getElementById('rec-tempo').value,
+                clas: document.getElementById('rec-clas').value,
+                combate: document.getElementById('rec-combate').value,
+                build: document.getElementById('rec-build').value,
+                farm: document.getElementById('rec-farm').value,
+                voice: document.getElementById('rec-voice').value,
+                plataforma: document.getElementById('rec-plat').value,
+                rank: document.getElementById('rec-rank').value,
+                horarios: document.getElementById('rec-horarios').value || "N/I",
+                aniversario: document.getElementById('rec-aniv').value || "N/I",
+                status: 'pendente',
+                createdAt: Date.now()
             };
-            try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data); localStorage.setItem('afk_rec_nick', nick); window.notify("Formulário enviado!", "success"); document.getElementById('form-recruitment').reset(); window.renderUserStatus(); } catch(e) {}
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data);
+            window.notify("Enviado com sucesso!", "success");
+            document.getElementById('form-recruitment').reset();
         };
-
-        // --- HANDLERS ADMINISTRATIVOS ---
-        window.approveAllianceRequest = async (id, d) => { if (currentUser.name !== "Luhnny") return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: d.name, tag: d.tag, members: [], createdAt: Date.now() }); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
-        window.rejectAllianceRequest = async (id) => { if (currentUser.name !== "Luhnny") return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
-        window.removeAllyMember = async (id, n) => { const a = allAlliances.find(x => x.id === id); if(a) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); };
-        window.deleteIdentity = async (n) => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); window.notify("Vínculo removido.", "info"); };
-        window.requestDeleteAlliance = (id) => { allianceToDeleteId = id; window.openModal('modal-confirm-alliance-delete'); };
-        window.confirmAllianceDelete = async () => { if (!allianceToDeleteId) return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId)); window.closeModal('modal-confirm-alliance-delete'); };
-
-        // --- LOGIN ---
-        window.logout = () => { currentUser = null; localStorage.removeItem('afk_user'); window.updateUI(); window.notify("Sessão encerrada.", "info"); };
 
         // --- SNAPSHOTS ---
         onAuthStateChanged(auth, async (u) => {
@@ -338,11 +506,22 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAdminApplications(); window.renderUserStatus(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAdminApplications(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { 
+                allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); 
+                window.renderIdentities(); 
+            });
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
-            lucide.createIcons();
         });
+
+        window.populateAllySelect = () => {
+            const s = document.getElementById('login-ally-clan'); if(!s) return;
+            let h = '<option value="">Selecionar clã</option><option value="C0RV0S">C0RV0S</option><option value="Tenebris">Tenebris</option>';
+            allAlliances.forEach(a => { if(a.name!=="C0RV0S" && a.name!=="Tenebris") h += `<option value="${a.name}">${a.name}</option>`; });
+            s.innerHTML = h;
+        };
+        
+        window.openCreateModal = () => { editingEventId = null; document.getElementById('modal-admin-event-form').reset(); window.openModal('modal-admin-event'); };
     </script>
 </head>
 <body class="min-h-screen text-slate-800 pb-20">
@@ -355,13 +534,15 @@
                 <i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto
             </div>
         </div>
-        <h1 class="text-6xl font-extrabold tracking-tight mb-2 text-white drop-shadow-lg text-center w-full uppercase">CLÃ AFK</h1>
-        <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest text-center w-full">Criado por Luhnny</p>
+        <h1 class="text-6xl font-extrabold tracking-tight mb-2 uppercase">CLÃ AFK</h1>
+        <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest">Criado por Luhnny</p>
         <div class="mt-6 flex justify-center w-full">
-            <button id="btn-login-trigger" onclick="window.openModal('modal-login')" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2 uppercase tracking-tighter"><i data-lucide="log-in" class="w-4 h-4"></i> Acessar</button>
+            <button id="btn-login-trigger" onclick="window.openModal('modal-login')" class="bg-white text-pink-600 px-8 py-3 rounded-xl text-lg font-bold shadow-2xl transition hover:scale-105 active:scale-95 uppercase tracking-tighter btn-attention flex items-center gap-2">
+                <i data-lucide="log-in" class="w-5 h-5"></i> Acessar Conta
+            </button>
             <div id="user-logged-in" class="hidden bg-white/20 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-3">
                 <span>Olá, <strong id="logged-name"></strong></span>
-                <button onclick="window.logout()" class="hover:text-red-200 transition font-bold uppercase text-[10px]">Sair</button>
+                <button onclick="localStorage.removeItem('afk_user'); location.reload();" class="hover:text-red-200 transition font-bold uppercase text-[10px]">Sair</button>
             </div>
         </div>
     </header>
@@ -381,8 +562,8 @@
         <!-- APRESENTAÇÃO -->
         <div id="tab-apresentacao">
             <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed">
-                <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover shadow-sm"></div></div>
-                <h2 class="text-3xl font-bold text-pink-500 mb-6 flex items-center justify-center gap-3 text-center w-full uppercase leading-tight tracking-tighter"><i data-lucide="sparkles" class="w-8 h-8"></i> Breve apresentação</h2>
+                <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
+                <h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2>
                 <div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8">
                     <p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p>
                     <p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.</p>
@@ -395,41 +576,59 @@
             </div>
         </div>
 
-        <!-- MEMBROS (18 PERFIS ORGANIZADOS) -->
+        <!-- MEMBROS -->
         <div id="tab-membros" class="hidden">
+            <!-- PAINEL DE IDENTIDADES MEMBROS (FILTRADO) -->
+            <div id="member-identities-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-slate-100">
+                <h3 class="text-xl font-bold text-slate-600 mb-6 uppercase tracking-tighter flex items-center justify-center gap-2"><i data-lucide="fingerprint"></i> Gerenciar Identidades (Membros)</h3>
+                <div id="member-identities-list" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+            </div>
+
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
-                <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users" class="w-6 h-6"></i> Membros Ativos</h2>
+                <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2>
                 <div class="text-sm text-pink-400/70 italic font-medium">Total: 18 membros registrados</div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
                 <!-- Luhnny -->
                 <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform">
-                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3><div class="relative"><img src="luhnny.png" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"><div class="absolute -top-2 -right-2 bg-pink-100 p-1 rounded-lg text-pink-500 shadow-sm"><i data-lucide="star" class="w-4 h-4"></i></div></div></div>
-                    <div class="space-y-3 mb-6 flex-grow text-sm">
-                        <div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/10</span></div>
-                        <div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Manhã e Noite</span></div>
-                    </div>
-                    <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full shadow-sm">Líder</span><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full shadow-sm">builder</span></div>
+                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3><img src="https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div>
+                    <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 17/10</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: Manhã e Noite</div></div>
+                    <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">Líder</span><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div>
                 </div>
                 <!-- K0ssh1_ -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 27/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 13:30 - 01:30</span></div></div><div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full shadow-sm font-bold">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full shadow-sm">cpvp</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 27/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 13:30 - 01:30</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
                 <!-- Lagartuuuxaaa -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="lagartuuuxaaa.png" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 01/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 22h - 02h</span></div></div><div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full shadow-sm font-bold">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full shadow-sm">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full shadow-sm">cpvp</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 18/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full shadow-sm">cpvp</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="1gcy.png" onerror="this.src='https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 05/04</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">build</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" alt="Pardas01" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 16/06</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 14/05</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Manhã</span></div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 28/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 11/08</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/01</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Variável</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 21/01</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia e Madrugada</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 19/09</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Dia todo</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 23/08</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 17/02</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Quase sempre</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 10/07</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Tarde e Noite</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full shadow-sm font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full shadow-sm font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2awsd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 20/05</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: Toda hora</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full shadow-sm font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full shadow-sm font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full shadow-sm font-bold">farm</span></div></div>
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=_Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100 shadow-sm"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="cake" class="w-4 h-4 text-pink-300"></i><span>Aniversário: 22/03</span></div><div class="flex items-center gap-3 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i><span>Disponível: 02h-21h</span></div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full shadow-sm">builder</span></div></div>
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 01/07</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 22h - 02h</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
+                <!-- iaruchy -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 18/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: Toda hora</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
+                <!-- 1gcy -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 05/04</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">build</span></div></div>
+                <!-- Pardas01 -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 16/06</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- baiano019 -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 14/05</div><div>Disponível: Noite</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <!-- Raitzz_ -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: Tarde e Manhã</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- Invisivel -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 28/07</div><div>Disponível: Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- NeverPuzzle -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 11/08</div><div>Disponível: Tarde</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- chorapropai -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/01</div><div>Disponível: Variável</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- felpipoca -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 21/01</div><div>Disponível: Dia e Madrugada</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- 1aswd -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><div class="p-2 bg-pink-50 rounded-lg text-pink-400"><i data-lucide="user"></i></div></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 19/09</div><div>Disponível: Dia todo</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <!-- ynSunn -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 23/08</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- labubusista -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 17/02</div><div>Disponível: Quase sempre</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <!-- TheP1nk -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/07</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
+                <!-- 2aswd -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 20/05</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
+                <!-- _Vzkls14 -->
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="https://ui-avatars.com/api/?name=_Vzkls14&background=f9a8d4&color=fff" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: 02h-21h</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
             </div>
         </div>
 
@@ -439,27 +638,27 @@
                 <i data-lucide="info" class="w-6 h-6 flex-shrink-0"></i>
                 <p><strong>Instrução:</strong> Você pode sugerir eventos para o clã. Basta apenas ter o nome do evento e o tema. A Luhnny revisará tudo antes de aprovar!</p>
             </div>
-            
+
             <div id="suggestions-section" class="hidden mb-12">
-                <h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center w-full uppercase leading-tight tracking-tighter"><i data-lucide="message-square" class="text-pink-400"></i> Sugestões Pendentes</h3>
+                <h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Pendentes</h3>
                 <div id="suggested-events-list"></div>
             </div>
 
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="calendar-heart"></i> Cronograma</h2>
-                <button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight tracking-tighter"><i data-lucide="plus-circle" class="w-4 h-4"></i> Criar / Sugerir Evento</button>
+                <button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir Evento</button>
             </div>
 
             <div id="active-events-list"></div>
             
             <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
-                <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase tracking-tighter leading-tight">Sem eventos ativos</h3>
-                <p class="text-slate-500 text-lg leading-relaxed">Novidades em breve!</p>
+                <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3>
+                <p class="text-slate-500 text-lg">Novidades em breve!</p>
             </div>
 
             <div class="mt-16 border-t border-pink-100 pt-10 text-left">
-                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history" class="w-5 h-5"></i> Histórico</h3>
-                <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"></div>
+                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico</h3>
+                <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
             </div>
         </div>
 
@@ -469,68 +668,105 @@
                 <h3 class="text-xl font-bold text-yellow-600 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="clock" class="w-6 h-6"></i> Solicitações Pendentes (Luhnny)</h3>
                 <div id="alliance-requests-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
             </div>
-            <div id="identities-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-slate-100">
-                <h3 class="text-xl font-bold text-slate-600 mb-6 uppercase tracking-tighter">Gerenciar Identidades Vinculadas</h3>
-                <div id="identities-list" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+            
+            <!-- PAINEL DE IDENTIDADES ALIADOS (FILTRADO) -->
+            <div id="ally-identities-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-slate-100">
+                <h3 class="text-xl font-bold text-slate-600 mb-6 uppercase tracking-tighter flex items-center justify-center gap-2"><i data-lucide="fingerprint"></i> Gerenciar Identidades (Aliados)</h3>
+                <div id="ally-identities-list" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
             </div>
-            <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2><button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition uppercase leading-tight tracking-tighter">Adicionar Aliança</button></div>
+
+            <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left">
+                <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2>
+                <button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition uppercase leading-tight tracking-tighter">Adicionar Aliança</button>
+            </div>
             <div id="alliances-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
         </div>
 
         <!-- RECRUTAMENTO -->
         <div id="tab-recrutamento" class="hidden text-center">
             <button id="luhnny-recruitment-toggle" onclick="window.toggleRecruitmentStatus()" class="hidden"></button>
-            <div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200"><h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="shield-check" class="w-6 h-6"></i> Gerenciar Pedidos</h2><div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div>
-            <div id="user-status-display" class="max-w-3xl mx-auto mb-10 hidden"></div>
+            <div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200">
+                <h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center uppercase">Gerenciar Pedidos</h2>
+                <div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+            </div>
+            
             <div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto transition-all"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-inner"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight tracking-tighter">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed font-medium">Neste momento não estamos a aceitar candidaturas. Tenta mais tarde!</p></div>
-            <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center"><h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter text-center w-full leading-tight">FORMULÁRIO</h2><form id="form-recruitment" onsubmit="event.preventDefault(); window.submitRecruitment();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Discord (Usuário)*:</label><input type="text" id="rec-discord" required placeholder="Usuário" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Tempo de Jogo (horas)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Simple Voice Chat?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="Sim">Sim</option><option value="Não">Não</option></select></div><div class="col-span-full"><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Mobile ou PC?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 transition-all"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div><div><label class="block text-[10px] font-bold text-pink-400 uppercase mb-1 ml-2 leading-tight">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2 leading-tight">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 transition-all"></div><div class="col-span-full"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-2 leading-tight">Horários Disponíveis:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300 h-12 transition-all"></textarea></div><button type="submit" id="btn-submit-rec" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] active:scale-95 transition-all uppercase tracking-widest leading-tight tracking-tighter">Enviar Formulário</button></form></div>
+
+            <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center">
+                <h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2>
+                <form id="form-recruitment" onsubmit="event.preventDefault(); window.submitRecruitment();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Discord*:</label><input type="text" id="rec-discord" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Tempo de Jogo (h)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Simple Voice?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sim">Sim</option><option value="Não">Não</option></select></div>
+                    <div class="col-span-full"><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">PC ou Mobile?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div>
+                    <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                    <div><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+                    <div class="col-span-full"><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Horários:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl h-16"></textarea></div>
+                    <button type="submit" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] transition-all uppercase tracking-widest leading-tight">Enviar Formulário</button>
+                </form>
+            </div>
         </div>
     </main>
 
-    <footer class="py-10 text-center text-pink-400 text-sm opacity-70 leading-relaxed text-center w-full uppercase tracking-tighter font-semibold"><p>Clã AFK fundado em 2025 por Luhnny</p></footer>
+    <footer class="py-10 text-center text-pink-400 text-sm opacity-70 uppercase tracking-tighter font-semibold">Clã AFK fundado em 2025 por Luhnny</footer>
 
     <!-- MODAIS -->
-    <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-center">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden">
-            <div class="flex border-b mb-6"><button id="tab-login-afk" onclick="window.switchLoginTab('afk')" class="flex-1 py-3 text-sm font-semibold login-tab-active uppercase tracking-tighter">Clã AFK</button><button id="tab-login-ally" onclick="window.switchLoginTab('ally')" class="flex-1 py-3 text-sm font-semibold text-slate-400 uppercase tracking-tighter">Aliança</button></div>
+    <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden text-center">
+            <div class="flex border-b mb-6">
+                <button id="tab-login-afk" onclick="window.switchLoginTab('afk')" class="flex-1 py-4 text-base font-bold login-tab-active uppercase tracking-tighter transition-all">Clã AFK</button>
+                <button id="tab-login-ally" onclick="window.switchLoginTab('ally')" class="flex-1 py-4 text-base font-bold text-slate-400 uppercase tracking-tighter transition-all">Aliança</button>
+            </div>
             <div id="login-afk-section" class="space-y-4 text-left">
-                <input type="text" id="login-afk-user" onkeydown="window.handleKeyNav(event, 'login-afk-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Nick">
-                <input type="password" id="login-afk-pass" onkeydown="window.handleKeyNav(event, null, 'login-afk-user', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Senha">
-                <button onclick="window.handleLoginAFK()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight tracking-tighter">Acessar</button>
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
+                <input type="text" id="login-afk-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Senha:</label>
+                <input type="password" id="login-afk-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <button onclick="window.handleLoginAFK()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Acessar</button>
             </div>
             <div id="login-ally-section" class="hidden space-y-4 text-left">
-                <input type="text" id="login-ally-user" onkeydown="window.handleKeyNav(event, 'login-ally-pass', null, false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Nick">
-                <input type="password" id="login-ally-pass" onkeydown="window.handleKeyNav(event, 'login-ally-clan', 'login-ally-user', false)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all" placeholder="Senha Aliança">
-                <select id="login-ally-clan" onkeydown="window.handleKeyNav(event, null, 'login-ally-pass', true)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 leading-tight transition-all"></select>
-                <button onclick="window.handleLoginAlly()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight tracking-tighter">Entrar como Aliado</button>
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
+                <input type="text" id="login-ally-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Senha Aliança:</label>
+                <input type="password" id="login-ally-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+                <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Seu Clã:</label>
+                <select id="login-ally-clan" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300 transition-all"></select>
+                <button onclick="window.handleLoginAlly()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Entrar como Aliado</button>
             </div>
-            <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-4 uppercase font-semibold text-center tracking-tighter leading-tight hover:text-pink-400 transition-colors">Fechar janela</button>
+            <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-6 uppercase font-semibold text-center hover:text-pink-400 transition-colors">Fechar janela</button>
         </div>
     </div>
-
-    <!-- Modais de Confirmação -->
-    <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Eliminar Candidatura?</h3><div class="flex gap-4"><button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
-    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 uppercase tracking-tighter leading-tight text-slate-800">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
-    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <!-- Modal Admin Evento -->
     <div id="modal-admin-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <h3 id="modal-admin-title" class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Evento</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <input type="text" id="ev-title" placeholder="Título*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
-                <input type="text" id="ev-theme" placeholder="Tema*" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
-                <input type="date" id="ev-date" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
-                <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight">
-                <input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
-                <div class="space-y-2">
-                    <input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight focus:border-pink-300 transition-all">
-                    <input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight focus:border-pink-300 transition-all">
-                    <input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm outline-none leading-tight focus:border-pink-300 transition-all">
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase">Configurar Evento</h3>
+            <form id="modal-admin-event-form" onsubmit="event.preventDefault(); window.publishClanEvent();">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="text" id="ev-title" placeholder="Título*" required class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                    <input type="text" id="ev-theme" placeholder="Tema*" required class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                    <input type="date" id="ev-date" required class="p-3 bg-slate-50 border rounded-xl">
+                    <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl">
+                    <input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl">
+                    <div class="md:col-span-2 space-y-2">
+                        <label class="text-[10px] font-bold text-pink-400 uppercase">Prêmios:</label>
+                        <input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                        <input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                        <input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm">
+                    </div>
                 </div>
-            </div>
-            <textarea id="ev-rules" placeholder="Regras e Descrição..." class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 focus:border-pink-300 outline-none leading-snug transition-all"></textarea>
-            <div class="flex gap-4"><button id="btn-publish-trigger" onclick="window.publishClanEvent()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg active:scale-95 transition-all uppercase font-bold leading-tight tracking-tighter">Publicar / Sugerir</button><button onclick="window.closeModal('modal-admin-event')" class="px-4 text-slate-400 text-xs font-bold uppercase leading-tight tracking-tighter hover:text-pink-400 transition-colors">Voltar</button></div>
+                <textarea id="ev-rules" placeholder="Regras e Descrição..." required class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 focus:border-pink-300 outline-none"></textarea>
+                <div class="flex gap-4">
+                    <button type="submit" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg uppercase">Salvar Evento</button>
+                    <button type="button" onclick="window.closeModal('modal-admin-event')" class="px-4 text-slate-400 text-xs font-bold uppercase">Voltar</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -546,6 +782,29 @@
             </div>
         </div>
     </div>
+
+    <!-- Modais de Confirmação -->
+    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+            <h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Evento?</h3>
+            <div class="flex gap-4">
+                <button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button>
+                <button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+            <h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Pedido?</h3>
+            <div class="flex gap-4">
+                <button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button>
+                <button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
 </body>
 </html>
