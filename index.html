@@ -79,7 +79,6 @@
 
         window.openModal = (id) => { 
             document.getElementById(id)?.classList.remove('hidden'); 
-            // Focar no primeiro input se for o modal de login
             if(id === 'modal-login') {
                 setTimeout(() => document.getElementById('login-user')?.focus(), 100);
             }
@@ -179,13 +178,13 @@
                 
                 await updateDoc(userRef, { lastLogin: Date.now() });
 
-                if (isAlly) {
-                    const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase());
-                    await setDoc(identityRef, { nick: userData.name, deviceId: "auth_v2", createdAt: Date.now() });
-                } else {
-                    const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase()); 
-                    await setDoc(identityRef, { nick: userData.name, role: 'member', createdAt: Date.now() });
-                }
+                // Corrigido para garantir que role seja salvo corretamente no login
+                const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase());
+                const identityData = { nick: userData.name, createdAt: Date.now() };
+                if (isAlly) identityData.deviceId = "auth_v2";
+                else identityData.role = "member";
+                
+                await setDoc(identityRef, identityData);
 
                 window.loginSuccess({ ...userData, isAdmin, isAlly });
 
@@ -519,7 +518,13 @@
             const memIdenL = document.getElementById('member-identities-list');
 
             if (isAdmin) {
-                const members = allIdentities.filter(i => i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === i.nick.toLowerCase()));
+                // Safeguard against missing nick
+                const members = allIdentities.filter(i => {
+                    const nick = i.nick || "";
+                    return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase());
+                });
+                
+                // Allies are everyone else
                 const allies = allIdentities.filter(i => !members.includes(i));
 
                 if (allyIdenC && allyIdenL) {
@@ -528,7 +533,7 @@
                     if (allies.length === 0) allyIdenL.innerHTML = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>';
                     else {
                         allies.forEach(i => {
-                            allyIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick}</span><button onclick="window.deleteIdentity('${i.nick.toLowerCase()}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="unlink" class="w-4 h-4"></i></button></div>`;
+                            allyIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
                         });
                     }
                 }
@@ -539,7 +544,8 @@
                     if (members.length === 0) memIdenL.innerHTML = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>';
                     else {
                         members.forEach(i => {
-                            memIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick}</span><button onclick="window.deleteIdentity('${i.nick.toLowerCase()}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="unlink" class="w-4 h-4"></i></button></div>`;
+                            // Using i.id for deletion ensures we target the document ID, usually same as lowercase nick but safer
+                            memIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
                         });
                     }
                 }
@@ -547,6 +553,7 @@
                 if(allyIdenC) allyIdenC.classList.add('hidden');
                 if(memIdenC) memIdenC.classList.add('hidden');
             }
+            lucide.createIcons();
         };
 
         window.renderAlliances = function() {
