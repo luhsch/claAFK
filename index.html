@@ -71,6 +71,8 @@
         let giveawayToDeleteId = null;
         let memberToDelete = null; 
         
+        let editingGiveawayId = null; // Variável para controlar edição de sorteio
+
         // Variaveis para preservar o autor original ao editar
         let editingEventAuthor = null;
         let editingClanEventAuthor = null;
@@ -537,26 +539,83 @@
         };
 
         // --- SISTEMA DE SORTEIOS ---
-        window.createGiveaway = async () => {
+        
+        // Função unificada para Salvar (Criar ou Editar)
+        window.saveGiveaway = async () => {
             const prize = document.getElementById('giv-prize').value.trim();
             const date = document.getElementById('giv-date').value;
             const time = document.getElementById('giv-time').value;
             
             if (!prize || !date || !time) return window.notify("Preencha todos os campos do sorteio.", "error", false);
 
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), {
+            const data = {
                 prize,
                 date,
-                time,
-                participants: [],
-                winner: null,
-                status: 'open',
-                createdBy: currentUser.name,
-                createdAt: Date.now()
-            });
-            window.notify("Sorteio Criado!", "success", false); // Som vem do listener
+                time
+            };
+
+            if (editingGiveawayId) {
+                // Modo Edição
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', editingGiveawayId), data);
+                window.notify("Sorteio Atualizado!", "success", false);
+            } else {
+                // Modo Criação
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), {
+                    ...data,
+                    participants: [],
+                    winner: null,
+                    status: 'open',
+                    createdBy: currentUser.name,
+                    createdAt: Date.now()
+                });
+                window.notify("Sorteio Criado!", "success", false);
+            }
+            
             window.closeModal('modal-create-giveaway');
             document.getElementById('form-create-giveaway').reset();
+            editingGiveawayId = null;
+        };
+
+        window.openCreateGiveawayModal = () => {
+            editingGiveawayId = null;
+            document.getElementById('form-create-giveaway').reset();
+            document.getElementById('modal-title-giveaway').innerText = "Novo Sorteio";
+            window.openModal('modal-create-giveaway');
+        };
+
+        window.editGiveaway = (id) => {
+            const g = allGiveaways.find(x => x.id === id);
+            if (!g) return;
+            
+            editingGiveawayId = id;
+            document.getElementById('giv-prize').value = g.prize;
+            document.getElementById('giv-date').value = g.date;
+            document.getElementById('giv-time').value = g.time;
+            document.getElementById('modal-title-giveaway').innerText = "Editar Sorteio";
+            window.openModal('modal-create-giveaway');
+        };
+
+        window.viewParticipants = (id) => {
+            const g = allGiveaways.find(x => x.id === id);
+            const listContainer = document.getElementById('participants-list-content');
+            const totalEl = document.getElementById('participants-total-count');
+            
+            listContainer.innerHTML = '';
+            
+            if (g && g.participants && g.participants.length > 0) {
+                totalEl.innerText = `${g.participants.length} Participantes`;
+                g.participants.forEach(p => {
+                    listContainer.innerHTML += `
+                        <div class="flex items-center gap-3 p-3 bg-pink-50 rounded-xl border border-pink-100">
+                            <img src="https://ui-avatars.com/api/?name=${p}&background=fbcfe8&color=db2777" class="w-8 h-8 rounded-full">
+                            <span class="font-bold text-slate-700">${p}</span>
+                        </div>`;
+                });
+            } else {
+                totalEl.innerText = "0 Participantes";
+                listContainer.innerHTML = '<div class="col-span-full text-center text-slate-400 italic py-4">Ninguém participando ainda.</div>';
+            }
+            window.openModal('modal-view-participants');
         };
 
         window.joinGiveaway = async (id) => {
@@ -645,20 +704,36 @@
                     }
 
                     let drawBtn = '';
+                    // Botão para sortear e ver participantes (Luhnny)
                     if (isLuhnny && pCount > 0) {
-                        drawBtn = `<button onclick="window.runGiveawayDraw('${g.id}')" class="w-full mt-3 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Realizar Sorteio</button>`;
+                        drawBtn = `
+                        <div class="mt-3 flex gap-2">
+                            <button onclick="window.runGiveawayDraw('${g.id}')" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear</button>
+                            <button onclick="window.viewParticipants('${g.id}')" class="px-4 py-3 rounded-xl bg-pink-100 text-pink-600 font-bold shadow-sm hover:bg-pink-200 transition"><i data-lucide="eye"></i></button>
+                        </div>`;
                     } else if (isLuhnny && pCount === 0) {
                         drawBtn = `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>`;
+                    } else if (isEventAdmin && !isLuhnny) {
+                        // Outros admins podem ver participantes também, mas não sortear
+                         drawBtn = `<button onclick="window.viewParticipants('${g.id}')" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>`;
                     }
 
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
                 }
 
-                const deleteBtn = isEventAdmin ? `<button onclick="window.requestDeleteGiveaway('${g.id}')" class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : '';
+                // Botões de administração (Deletar e Editar)
+                let adminControls = '';
+                if (isEventAdmin) {
+                    adminControls = `
+                    <div class="absolute top-4 right-4 flex gap-2">
+                        <button onclick="window.editGiveaway('${g.id}')" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
+                        <button onclick="window.requestDeleteGiveaway('${g.id}')" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                    </div>`;
+                }
 
                 list.innerHTML += `
                     <div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">
-                        ${deleteBtn}
+                        ${adminControls}
                         <div>
                             <div class="flex items-center gap-2 mb-2 text-pink-500 font-bold text-xs uppercase tracking-wider">
                                 <i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}
@@ -1665,7 +1740,7 @@
         <!-- SORTEIOS (NOVA ABA) -->
         <div id="tab-sorteios" class="hidden">
             <div id="btn-admin-giveaway" class="hidden mb-8 text-center">
-                <button onclick="window.openModal('modal-create-giveaway')" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
+                <button onclick="window.openCreateGiveawayModal()" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
                     <i data-lucide="gift"></i> Novo Sorteio
                 </button>
             </div>
@@ -1870,8 +1945,8 @@
     <!-- Modal Criar Sorteio -->
     <div id="modal-create-giveaway" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Novo Sorteio</h3>
-            <form id="form-create-giveaway" onsubmit="event.preventDefault(); window.createGiveaway();" class="space-y-4">
+            <h3 id="modal-title-giveaway" class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Novo Sorteio</h3>
+            <form id="form-create-giveaway" onsubmit="event.preventDefault(); window.saveGiveaway();" class="space-y-4">
                 <div>
                     <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Prêmio:</label>
                     <input type="text" id="giv-prize" placeholder="Ex: VIP no servidor" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
@@ -1886,9 +1961,23 @@
                         <input type="time" id="giv-time" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
                     </div>
                 </div>
-                <button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Criar Sorteio</button>
+                <button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Salvar Sorteio</button>
                 <button type="button" onclick="window.closeModal('modal-create-giveaway')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Ver Participantes Sorteio -->
+    <div id="modal-view-participants" class="hidden fixed inset-0 z-[1150] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-slate-700 uppercase tracking-tighter">Participantes</h3>
+                <span id="participants-total-count" class="bg-pink-100 text-pink-600 text-xs font-bold px-3 py-1 rounded-full">0</span>
+            </div>
+            <div id="participants-list-content" class="flex-grow overflow-y-auto space-y-2 pr-2">
+                <!-- Lista injetada via JS -->
+            </div>
+            <button onclick="window.closeModal('modal-view-participants')" class="mt-6 w-full bg-slate-100 text-slate-500 font-bold py-3 rounded-xl hover:bg-slate-200 transition uppercase text-sm">Fechar</button>
         </div>
     </div>
 
