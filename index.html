@@ -50,8 +50,14 @@
         let allIdentities = [];
         let allMissions = [];
         let allGiveaways = []; 
-        let hiddenStaticMembers = []; // Lista de membros estáticos removidos
+        let hiddenStaticMembers = []; 
         let isRecruitmentOpen = true; 
+        
+        // Flags para controlar notificações iniciais
+        let initialEventLoad = true;
+        let initialGiveawayLoad = true;
+        let initialRecruitmentLoad = true;
+        let initialRecruitmentListLoad = true; 
         
         let editingEventId = null;
         let eventToDeleteId = null;
@@ -59,9 +65,15 @@
         let applicationToDeleteId = null;
         let missionToDeleteId = null;
         let giveawayToDeleteId = null;
-        let memberToDelete = null; // Objeto para armazenar dados do membro a excluir
+        let memberToDelete = null; 
         
-        const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "SrLordM", "Bone"];
+        // --- SISTEMA DE PERMISSÕES ---
+        const SUPER_ADMINS = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"]; // Acesso total
+        const EVENT_ADMINS = ["SrLordM", "Bone"]; // Apenas Eventos e Sorteios
+        
+        // Lista combinada para verificações simples de "é algum tipo de admin"
+        const ALL_ADMINS = [...SUPER_ADMINS, ...EVENT_ADMINS];
+
         const INVITE_CODE_MEMBER = "senhadificil"; 
         const INVITE_CODE_ALLY = "123alianca";
 
@@ -72,7 +84,7 @@
             "SrLordM", "Bone"
         ];
 
-        // --- DADOS ESTÁTICOS DOS MEMBROS (Membros originais do clã) ---
+        // --- DADOS ESTÁTICOS DOS MEMBROS ---
         const STATIC_MEMBERS = [
             { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
             { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
@@ -91,12 +103,24 @@
             { nick: "labubusista", tags: ["spvp", "cpvp", "builder"], aniv: "17/02", disp: "Quase sempre", img: "labubusista.png" },
             { nick: "TheP1nk", tags: ["pvp", "cpvp", "builder"], aniv: "10/07", disp: "Tarde e Noite", img: "thep1nk.png" },
             { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
-            { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" }
+            { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" },
+            { nick: "SrLordM", tags: ["eventos"], aniv: "N/I", disp: "N/I", img: "https://ui-avatars.com/api/?name=SrLordM&background=f9a8d4&color=fff" },
+            { nick: "Bone", tags: ["eventos"], aniv: "N/I", disp: "N/I", img: "https://ui-avatars.com/api/?name=Bone&background=f9a8d4&color=fff" }
         ];
 
         // --- FUNÇÕES UTILITÁRIAS GLOBAIS ---
 
-        window.notify = (msg, type) => {
+        // Som de notificação (Pling agudo)
+        const notifAudio = new Audio("https://assets.mixkit.co/active_storage/sfx/1114/1114-preview.mp3"); // Pling mais agudo
+        notifAudio.volume = 0.6;
+
+        // Modificada para aceitar parâmetro de som explícito
+        window.notify = (msg, type, playSound = false) => {
+            if (playSound) {
+                notifAudio.currentTime = 0;
+                notifAudio.play().catch(e => console.log("Áudio bloqueado."));
+            }
+
             const t = document.getElementById('toast');
             if (!t) return;
             t.innerText = msg;
@@ -117,7 +141,7 @@
             currentUser = userDoc;
             localStorage.setItem('afk_user', JSON.stringify(currentUser));
             window.updateUI();
-            window.notify(`Olá, ${currentUser.name}!`, "success");
+            window.notify(`Olá, ${currentUser.name}!`, "success", false); // Sem som
             window.closeModal('modal-login');
         };
 
@@ -190,18 +214,18 @@
             const nick = document.getElementById('login-user').value.trim();
             const pass = document.getElementById('login-pass').value;
 
-            if (!nick || !pass) return window.notify("Preencha todos os campos.", "error");
+            if (!nick || !pass) return window.notify("Preencha todos os campos.", "error", false);
 
             try {
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nick.toLowerCase());
                 const userSnap = await getDoc(userRef);
 
-                if (!userSnap.exists()) return window.notify("Usuário não encontrado. Crie uma conta.", "error");
+                if (!userSnap.exists()) return window.notify("Usuário não encontrado. Crie uma conta.", "error", false);
 
                 const userData = userSnap.data();
-                if (userData.password !== pass) return window.notify("Senha incorreta.", "error");
+                if (userData.password !== pass) return window.notify("Senha incorreta.", "error", false);
 
-                const isAdmin = ADMINS_LIST.includes(userData.name);
+                const isAdmin = ADMINS_LIST.includes(userData.name); // Legacy check replaced by granular later
                 const isAlly = userData.role === 'ally';
                 
                 await updateDoc(userRef, { lastLogin: Date.now() });
@@ -218,7 +242,7 @@
 
             } catch (e) {
                 console.error(e);
-                window.notify("Erro ao fazer login.", "error");
+                window.notify("Erro ao fazer login.", "error", false);
             }
         };
 
@@ -229,24 +253,22 @@
             const clan = document.getElementById('reg-clan').value;
             const inviteCode = document.getElementById('reg-invite').value;
 
-            if (!nick || !pass || !inviteCode) return window.notify("Preencha todos os campos.", "error");
-            if (type === 'ally' && !clan) return window.notify("Selecione um clã.", "error");
+            if (!nick || !pass || !inviteCode) return window.notify("Preencha todos os campos.", "error", false);
+            if (type === 'ally' && !clan) return window.notify("Selecione um clã.", "error", false);
 
-            if (type === 'member' && inviteCode !== INVITE_CODE_MEMBER) return window.notify("Código de Membro incorreto.", "error");
-            if (type === 'ally' && inviteCode !== INVITE_CODE_ALLY) return window.notify("Código de Aliado incorreto.", "error");
+            if (type === 'member' && inviteCode !== INVITE_CODE_MEMBER) return window.notify("Código de Membro incorreto.", "error", false);
+            if (type === 'ally' && inviteCode !== INVITE_CODE_ALLY) return window.notify("Código de Aliado incorreto.", "error", false);
 
             let finalName = nick;
 
             if (type === 'member') {
                 const staticMatch = ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase());
-                // VERIFICAÇÃO DINÂMICA: Procura também na lista de recrutamentos aprovados
                 const recruitMatch = allApplications.find(app => app.nick.toLowerCase() === nick.toLowerCase() && app.status === 'aprovado');
                 
                 if (!staticMatch && !recruitMatch) {
-                    return window.notify("Este Nick não está na lista de membros permitidos e não possui aprovação recente.", "error");
+                    return window.notify("Este Nick não está na lista de membros permitidos e não possui aprovação recente.", "error", false);
                 }
                 
-                // Usa a formatação correta do nome (Maiúsculas/Minúsculas)
                 finalName = staticMatch || (recruitMatch ? recruitMatch.nick : nick);
             }
 
@@ -254,7 +276,7 @@
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', finalName.toLowerCase());
                 const userSnap = await getDoc(userRef);
 
-                if (userSnap.exists()) return window.notify("Este usuário já está registrado. Faça login.", "error");
+                if (userSnap.exists()) return window.notify("Este usuário já está registrado. Faça login.", "error", false);
 
                 const userData = {
                     name: finalName, 
@@ -278,15 +300,15 @@
                     }
                 }
 
-                window.notify("Conta criada com sucesso! Fazendo login...", "success");
+                window.notify("Conta criada com sucesso! Fazendo login...", "success", false);
                 
-                const isAdmin = ADMINS_LIST.includes(userData.name);
+                const isAdmin = ADMINS_LIST.includes(userData.name); // Legacy check
                 const isAlly = type === 'ally';
                 window.loginSuccess({ ...userData, isAdmin, isAlly });
 
             } catch (e) {
                 console.error(e);
-                window.notify("Erro ao registrar.", "error");
+                window.notify("Erro ao registrar.", "error", false);
             }
         };
 
@@ -309,7 +331,6 @@
             const countEl = document.getElementById('members-count');
             if(!grid) return;
             
-            // 1. Processar aprovados do recrutamento
             const approvedMembers = allApplications
                 .filter(app => app.status === 'aprovado')
                 .map(app => {
@@ -328,7 +349,7 @@
                     if(tags.length === 0) tags.push('membro');
 
                     return {
-                        id: app.id, // ID do doc no Firestore
+                        id: app.id, 
                         nick: app.nick,
                         role: null,
                         tags: tags,
@@ -339,7 +360,6 @@
                     };
                 });
 
-            // 2. Combinar com membros estáticos (filtrando os ocultos)
             const visibleStaticMembers = STATIC_MEMBERS.filter(m => !hiddenStaticMembers.includes(m.nick)).map(m => ({...m, isStatic: true}));
             
             const combinedMembers = [...visibleStaticMembers];
@@ -354,6 +374,7 @@
 
             grid.innerHTML = '';
             
+            // Apenas Luhnny pode deletar membros
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
 
             combinedMembers.forEach(m => {
@@ -364,14 +385,14 @@
                     let color = 'bg-slate-100 text-slate-600';
                     if (t === 'cpvp') color = 'bg-red-100 text-red-600';
                     if (t === 'spvp') color = 'bg-blue-100 text-blue-600';
-                    if (t === 'builder' || t === 'build') color = 'bg-yellow-100 text-yellow-600';
+                    if (t === 'builder' || t === 'build' || t === 'builder') color = 'bg-yellow-100 text-yellow-600';
                     if (t === 'farm') color = 'bg-green-100 text-green-600';
                     if (t === 'pvp') color = 'bg-purple-100 text-purple-600';
+                    if (t === 'eventos') color = 'bg-purple-100 text-purple-600';
                     
                     tagsHtml += `<span class="px-2 py-1 ${color} text-[10px] uppercase rounded-full font-bold">${t}</span>`;
                 });
 
-                // Botão de deletar para Luhnny
                 const deleteBtn = isLuhnny ? 
                     `<button onclick='window.requestDeleteMember(${JSON.stringify(m)})' class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition z-10"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` 
                     : '';
@@ -410,7 +431,6 @@
             
             try {
                 if (memberToDelete.isStatic) {
-                    // Adiciona à lista de ocultos no Firestore
                     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members');
                     const snap = await getDoc(settingsRef);
                     let currentList = [];
@@ -420,15 +440,14 @@
                         await setDoc(settingsRef, { nicks: [...currentList, memberToDelete.nick] });
                     }
                 } else {
-                    // Membro dinâmico: muda status para 'removed' no documento original
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', memberToDelete.id), {
                         status: 'removed'
                     });
                 }
-                window.notify(`Membro ${memberToDelete.nick} removido.`, "success");
+                window.notify(`Membro ${memberToDelete.nick} removido.`, "success", false);
             } catch (e) {
                 console.error(e);
-                window.notify("Erro ao remover membro.", "error");
+                window.notify("Erro ao remover membro.", "error", false);
             }
             window.closeModal('modal-confirm-member-delete');
             memberToDelete = null;
@@ -438,7 +457,7 @@
         window.createMission = async () => {
             const objective = document.getElementById('mis-objective').value.trim();
             const reward = document.getElementById('mis-reward').value.trim();
-            if (!objective || !reward) return window.notify("Preencha todos os campos da missão.", "error");
+            if (!objective || !reward) return window.notify("Preencha todos os campos da missão.", "error", false);
 
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), {
                 objective,
@@ -447,7 +466,7 @@
                 takenBy: null,
                 createdAt: Date.now()
             });
-            window.notify("Missão criada!", "success");
+            window.notify("Missão criada!", "success", false);
             window.closeModal('modal-create-mission');
             document.getElementById('form-create-mission').reset();
         };
@@ -458,7 +477,7 @@
                 status: 'taken',
                 takenBy: currentUser.name
             });
-            window.notify("Você aceitou a missão!", "success");
+            window.notify("Você aceitou a missão!", "success", false);
         };
 
         window.requestDeleteMission = (id) => {
@@ -469,7 +488,7 @@
         window.confirmMissionDelete = async () => {
             if (missionToDeleteId) {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', missionToDeleteId));
-                window.notify("Missão removida/concluída.", "success");
+                window.notify("Missão removida/concluída.", "success", false);
                 window.closeModal('modal-confirm-mission-delete');
             }
         };
@@ -485,10 +504,11 @@
 
             allMissions.sort((a,b) => b.createdAt - a.createdAt).forEach(m => {
                 const isTaken = m.status === 'taken';
-                const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+                // Permissão de ADMINS (SUPER_ADMINS)
+                const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
                 
                 let buttonHtml = '';
-                if (isAdmin) {
+                if (isSuperAdmin) {
                     buttonHtml = `<button onclick="window.requestDeleteMission('${m.id}')" class="w-full mt-4 py-2 rounded-xl border-2 border-red-100 text-red-400 font-bold hover:bg-red-50 transition uppercase text-xs">Concluir / Excluir</button>`;
                 } else if (!isTaken) {
                     buttonHtml = `<button onclick="window.takeMission('${m.id}')" class="w-full mt-4 py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl">Aceitar Missão</button>`;
@@ -518,7 +538,7 @@
             const date = document.getElementById('giv-date').value;
             const time = document.getElementById('giv-time').value;
             
-            if (!prize || !date || !time) return window.notify("Preencha todos os campos do sorteio.", "error");
+            if (!prize || !date || !time) return window.notify("Preencha todos os campos do sorteio.", "error", false);
 
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), {
                 prize,
@@ -530,7 +550,7 @@
                 createdBy: currentUser.name,
                 createdAt: Date.now()
             });
-            window.notify("Sorteio Criado!", "success");
+            window.notify("Sorteio Criado!", "success", false); // Som vem do listener
             window.closeModal('modal-create-giveaway');
             document.getElementById('form-create-giveaway').reset();
         };
@@ -541,19 +561,20 @@
             if (!giv) return;
             
             const currentParts = giv.participants || [];
-            if (currentParts.includes(currentUser.name)) return window.notify("Você já está participando!", "info");
+            if (currentParts.includes(currentUser.name)) return window.notify("Você já está participando!", "info", false);
 
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
                 participants: [...currentParts, currentUser.name]
             });
-            window.notify("Participação confirmada!", "success");
+            window.notify("Participação confirmada!", "success", false);
         };
 
         window.runGiveawayDraw = async (id) => {
-            if (!currentUser || currentUser.name !== "Luhnny") return window.notify("Apenas a Luhnny pode realizar o sorteio.", "error");
+            // Apenas Luhnny pode rodar sorteio
+            if (!currentUser || currentUser.name !== "Luhnny") return window.notify("Apenas a Luhnny pode realizar o sorteio.", "error", false);
             
             const giv = allGiveaways.find(g => g.id === id);
-            if (!giv || !giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error");
+            if (!giv || !giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error", false);
 
             const winner = giv.participants[Math.floor(Math.random() * giv.participants.length)];
 
@@ -572,7 +593,7 @@
             if (giveawayToDeleteId) {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', giveawayToDeleteId));
                 window.closeModal('modal-confirm-giveaway-delete');
-                window.notify("Sorteio removido.", "success");
+                window.notify("Sorteio removido.", "success", false);
             }
         };
 
@@ -580,7 +601,7 @@
             const list = document.getElementById('giveaways-list'); if(!list) return;
             list.innerHTML = '';
 
-            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
 
             if (allGiveaways.length === 0) {
@@ -624,7 +645,7 @@
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
                 }
 
-                const deleteBtn = isAdmin ? `<button onclick="window.requestDeleteGiveaway('${g.id}')" class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : '';
+                const deleteBtn = isEventAdmin ? `<button onclick="window.requestDeleteGiveaway('${g.id}')" class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : '';
 
                 list.innerHTML += `
                     <div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">
@@ -652,14 +673,14 @@
         window.createEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
             let controls = '';
-            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const pCount = (ev.participants || []).length;
             
-            const creditText = (ev.suggestedBy && !ADMINS_LIST.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
+            const creditText = (ev.suggestedBy && !ALL_ADMINS.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
             const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
             
-            if (isAdmin) {
+            if (isEventAdmin) {
                 if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
             } else if (currentUser && !currentUser.isAlly && (type === 'active' || type === 'history')) {
@@ -701,7 +722,7 @@
             const history = allEvents.filter(e => e.status === 'ended');
             const suggestions = allEvents.filter(e => e.status === 'suggestion');
 
-            if (currentUser && ADMINS_LIST.includes(currentUser.name) && suggestions.length > 0) {
+            if (currentUser && ALL_ADMINS.includes(currentUser.name) && suggestions.length > 0) {
                 suggS?.classList.remove('hidden');
                 suggestions.forEach(ev => suggC.innerHTML += window.createEventCard(ev, 'suggestion'));
             } else suggS?.classList.add('hidden');
@@ -717,7 +738,7 @@
         };
 
         window.publishClanEvent = async () => {
-            const isAdmin = ADMINS_LIST.includes(currentUser.name);
+            const isAdmin = ALL_ADMINS.includes(currentUser.name);
             const data = {
                 title: document.getElementById('ev-title').value,
                 theme: document.getElementById('ev-theme').value,
@@ -738,12 +759,12 @@
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data);
             }
             window.closeModal('modal-admin-event');
-            window.notify(isAdmin ? "Evento Publicado!" : "Sugestão enviada para Luhnny!", "success");
+            window.notify(isAdmin ? "Evento Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
         };
 
         window.approveClanEvent = async (id) => {
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: 'active' });
-            window.notify("Evento aprovado!", "success");
+            window.notify("Evento aprovado!", "success", false);
         };
 
         window.updateClanEventStatus = async (id, current) => {
@@ -780,13 +801,13 @@
         window.publishClanAlliance = async () => {
             const name = document.getElementById('ali-name').value;
             const tag = document.getElementById('ali-tag').value;
-            const isAdmin = ADMINS_LIST.includes(currentUser.name);
+            const isAdmin = SUPER_ADMINS.includes(currentUser.name);
             if(isAdmin) {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() });
-                window.notify("Aliança criada!", "success");
+                window.notify("Aliança criada!", "success", false);
             } else {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() });
-                window.notify("Solicitação enviada!", "success");
+                window.notify("Solicitação enviada!", "success", false);
             }
             window.closeModal('modal-admin-alliance');
         };
@@ -807,10 +828,10 @@
         window.deleteIdentity = async (n) => { 
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); 
-                window.notify("Vínculo removido.", "info"); 
+                window.notify("Vínculo removido.", "info", false); 
             } catch (e) {
                 console.error("Erro ao deletar:", e);
-                window.notify("Erro ao remover: " + e.message, "error");
+                window.notify("Erro ao remover: " + e.message, "error", false);
             }
         };
         window.requestDeleteAlliance = (id) => { allianceToDeleteId = id; window.openModal('modal-confirm-alliance-delete'); };
@@ -821,7 +842,7 @@
         };
 
         window.renderIdentities = function() {
-            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
             const allyIdenC = document.getElementById('ally-identities-section');
             const allyIdenL = document.getElementById('ally-identities-list');
             const memIdenC = document.getElementById('member-identities-section');
@@ -871,7 +892,7 @@
             const c = document.getElementById('alliances-list'); if (!c) return;
             const reqC = document.getElementById('alliance-requests-section');
             const reqL = document.getElementById('alliance-requests-list');
-            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
             c.innerHTML = '';
             
             if (allAlliances.length === 0) {
@@ -888,21 +909,20 @@
                     reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`;
                 });
             } else reqC?.classList.add('hidden');
-            // Removida chamada redundante de renderIdentities daqui
         };
 
         // --- RECRUTAMENTO ---
         window.updateApplicationStatus = async (id, status) => {
-            if (!currentUser || !ADMINS_LIST.includes(currentUser.name)) return;
+            if (!currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), {
                 status: status,
                 handledBy: currentUser.name
             });
-            window.notify(`Pedido ${status}!`, "success");
+            window.notify(`Pedido ${status}!`, "success", false);
         };
 
         window.requestDeleteApplication = (id) => { applicationToDeleteId = id; window.openModal('modal-confirm-rec-delete'); };
-        window.confirmRecDelete = async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.closeModal('modal-confirm-rec-delete'); window.notify("Candidatura removida.", "success"); };
+        window.confirmRecDelete = async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.closeModal('modal-confirm-rec-delete'); window.notify("Candidatura removida.", "success", false); };
 
         window.toggleRecruitmentStatus = async () => {
             if (currentUser?.name !== "Luhnny") return;
@@ -911,7 +931,7 @@
         };
 
         window.renderAdminApplications = function() {
-            const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !ADMINS_LIST.includes(currentUser.name)) return;
+            const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
             c.innerHTML = '';
             if (allApplications.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido recebido.</p>'; }
             else {
@@ -925,7 +945,9 @@
         };
 
         window.updateUI = function() {
-            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
+            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
+
             const aRecPanel = document.getElementById('admin-recruitment-section');
             const aAllyBtn = document.getElementById('admin-alliance-panel');
             const lBtn = document.getElementById('btn-login-trigger'); 
@@ -933,7 +955,7 @@
             const aEventBtn = document.getElementById('admin-event-panel');
             const aMissionBtn = document.getElementById('btn-missoes');
             const aMissionAdmin = document.getElementById('admin-mission-controls');
-            const aGiveawayBtn = document.getElementById('btn-admin-giveaway'); // Botão criar sorteio
+            const aGiveawayBtn = document.getElementById('btn-admin-giveaway'); 
             const recToggle = document.getElementById('luhnny-recruitment-toggle');
             const recFormS = document.getElementById('recruitment-form-section');
             const recClosedM = document.getElementById('recruitment-closed-message');
@@ -942,29 +964,34 @@
                 lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden');
                 document.getElementById('logged-name').innerText = currentUser.name;
                 
-                // Admin Panels
-                if (isAdmin) {
+                // Super Admin Panels (Luhnny, Lagartuuuxaaa, K0ssh1_)
+                if (isSuperAdmin) {
                     aRecPanel?.classList.remove('hidden');
                     aAllyBtn?.classList.remove('hidden');
                     recToggle?.classList.remove('hidden');
                     recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO";
                     recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`;
                     aMissionAdmin?.classList.remove('hidden');
-                    aGiveawayBtn?.classList.remove('hidden'); // Exibir botão criar sorteio
                 } else {
                     aRecPanel?.classList.add('hidden');
                     aAllyBtn?.classList.add('hidden');
                     recToggle?.classList.add('hidden');
                     aMissionAdmin?.classList.add('hidden');
+                }
+
+                // Event Admin Panels (Super Admins + SrLordM, Bone)
+                if (isEventAdmin) {
+                    aEventBtn?.classList.remove('hidden');
+                    aGiveawayBtn?.classList.remove('hidden');
+                } else {
+                    aEventBtn?.classList.add('hidden');
                     aGiveawayBtn?.classList.add('hidden');
                 }
 
-                // Member features (Includes Admins, Excludes Allies)
+                // Member features (Everyone except Allies)
                 if (!currentUser.isAlly) {
-                    aEventBtn?.classList.remove('hidden');
                     aMissionBtn?.classList.remove('hidden');
                 } else {
-                    aEventBtn?.classList.add('hidden');
                     aMissionBtn?.classList.add('hidden');
                 }
 
@@ -990,7 +1017,7 @@
             window.renderIdentities();
             window.renderMissions();
             window.renderGiveaways();
-            window.renderMembers(); // Chama a nova função de membros
+            window.renderMembers(); 
             lucide.createIcons();
         };
 
@@ -1014,34 +1041,88 @@
                 createdAt: Date.now()
             };
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data);
-            window.notify("Enviado com sucesso!", "success");
+            window.notify("Enviado com sucesso!", "success", false);
             document.getElementById('form-recruitment').reset();
         };
 
         // --- SNAPSHOTS ---
         onAuthStateChanged(auth, async (u) => {
             if (!u) await signInAnonymously(auth);
-            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) isRecruitmentOpen = s.data().isOpen; window.updateUI(); });
+            
+            // Recrutamento
+            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { 
+                if (s.exists()) {
+                    const newData = s.data().isOpen;
+                    if (!initialRecruitmentLoad && newData !== isRecruitmentOpen) {
+                        window.notify(newData ? "🔔 Recrutamento ABERTO!" : "🔒 Recrutamento FECHADO", newData ? "success" : "info", false);
+                    }
+                    isRecruitmentOpen = newData; 
+                }
+                initialRecruitmentLoad = false;
+                window.updateUI(); 
+            });
+
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members'), (s) => { 
                 hiddenStaticMembers = s.exists() ? (s.data().nicks || []) : []; 
                 window.renderMembers(); 
             });
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); });
+
+            // Eventos - COM SOM
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { 
+                if (!initialEventLoad) {
+                    s.docChanges().forEach(change => {
+                        if (change.type === "added") window.notify("🎉 Novo Evento Criado!", "success", true);
+                    });
+                }
+                allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); 
+                window.renderEvents(); 
+                initialEventLoad = false;
+            });
+
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), (s) => { allMissions = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderMissions(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
+            
+            // Recrutamento Decisão - COM SOM
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { 
+                if (!initialRecruitmentListLoad) {
+                    s.docChanges().forEach(change => {
+                        if (change.type === "modified") {
+                            const data = change.doc.data();
+                            const nick = data.nick || "Um jogador";
+                            if (data.status === 'aprovado') {
+                                window.notify(`🎉 ${nick} foi APROVADO no clã!`, "success", true);
+                            } else if (data.status === 'negado') {
+                                window.notify(`🚫 Candidatura de ${nick} foi negada.`, "error", true);
+                            }
+                        }
+                    });
+                }
                 allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); 
                 window.renderAdminApplications(); 
-                window.renderMembers(); // Atualiza membros quando recrutamento muda
+                window.renderMembers(); 
+                initialRecruitmentListLoad = false;
             });
+            
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { 
                 allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); 
                 window.renderIdentities(); 
             });
+            
+            // Sorteios - COM SOM
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => {
+                if (!initialGiveawayLoad) {
+                    s.docChanges().forEach(change => {
+                        if (change.type === "added") window.notify("🎁 Novo Sorteio Rolando!", "success", true);
+                        if (change.type === "modified") {
+                             const data = change.doc.data();
+                             if(data.winner && data.status === 'closed') window.notify(`🏆 Temos um vencedor no sorteio: ${data.winner}!`, "success", true);
+                        }
+                    });
+                }
                 allGiveaways = s.docs.map(d => ({id:d.id, ...d.data()}));
                 window.renderGiveaways();
+                initialGiveawayLoad = false;
             });
 
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
