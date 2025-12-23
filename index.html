@@ -580,7 +580,12 @@
             const giv = allGiveaways.find(g => g.id === id);
             if (!giv || !giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error", false);
 
-            const winner = giv.participants[Math.floor(Math.random() * giv.participants.length)];
+            // Algoritmo de sorteio criptograficamente seguro para garantir imparcialidade total
+            const randomBuffer = new Uint32Array(1);
+            window.crypto.getRandomValues(randomBuffer);
+            // O operador % (módulo) garante que o número esteja dentro do intervalo de participantes
+            const winnerIndex = randomBuffer[0] % giv.participants.length;
+            const winner = giv.participants[winnerIndex];
 
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
                 winner: winner,
