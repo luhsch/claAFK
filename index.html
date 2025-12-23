@@ -71,6 +71,10 @@
         let giveawayToDeleteId = null;
         let memberToDelete = null; 
         
+        // Variaveis para preservar o autor original ao editar
+        let editingEventAuthor = null;
+        let editingClanEventAuthor = null;
+
         // --- SISTEMA DE PERMISSÕES ---
         const SUPER_ADMINS = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"]; // Acesso total
         const EVENT_ADMINS = ["SrLordM", "Bone"]; // Apenas Eventos e Sorteios
@@ -680,7 +684,8 @@
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
             
             if (isEventAdmin) {
-                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
+                // Adicionado botão Editar nas sugestões
+                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
             } else if (currentUser && !currentUser.isAlly && (type === 'active' || type === 'history')) {
                 controls = pList;
@@ -749,7 +754,8 @@
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
             
             if (isLuhnny) {
-                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
+                // Adicionado botão Editar nas sugestões internas
+                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatusInternal('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.deleteClanEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
             } else {
                  // Membros normais veem a lista de inscritos
@@ -820,13 +826,21 @@
                 prizes: [document.getElementById('clan-ev-p1').value, document.getElementById('clan-ev-p2').value, document.getElementById('clan-ev-p3').value],
                 rules: document.getElementById('clan-ev-rules').value,
                 status: isLuhnny ? 'active' : 'suggestion',
-                suggestedBy: currentUser.name,
+                // Se estiver editando, mantém o autor original, senão usa o atual
+                suggestedBy: (editingClanEventId && editingClanEventAuthor) ? editingClanEventAuthor : currentUser.name,
                 participants: [],
                 createdAt: Date.now()
             };
             if (editingClanEventId) {
+                // Se Luhnny editar, vira 'active'
+                if (isLuhnny) data.status = 'active';
+                // Preserva participantes existentes ao editar
+                const oldEvent = allClanEvents.find(e => e.id === editingClanEventId);
+                if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
+                
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', editingClanEventId), data);
                 editingClanEventId = null;
+                editingClanEventAuthor = null;
             } else {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), data);
             }
@@ -864,6 +878,7 @@
         window.editClanEventInternal = (id) => {
             const ev = allClanEvents.find(e => e.id === id);
             editingClanEventId = id;
+            editingClanEventAuthor = ev.suggestedBy; // Salva o autor original
             document.getElementById('clan-ev-title').value = ev.title;
             document.getElementById('clan-ev-theme').value = ev.theme;
             document.getElementById('clan-ev-date').value = ev.date;
@@ -878,6 +893,7 @@
         
         window.openCreateClanEventModal = () => {
              editingClanEventId = null;
+             editingClanEventAuthor = null;
              document.getElementById('modal-clan-event-form').reset();
              window.openModal('modal-clan-event');
         };
@@ -894,13 +910,21 @@
                 prizes: [document.getElementById('ev-p1').value, document.getElementById('ev-p2').value, document.getElementById('ev-p3').value],
                 rules: document.getElementById('ev-rules').value,
                 status: isAdmin ? 'active' : 'suggestion',
-                suggestedBy: currentUser.name,
+                // Se estiver editando, mantém o autor original
+                suggestedBy: (editingEventId && editingEventAuthor) ? editingEventAuthor : currentUser.name,
                 participants: [],
                 createdAt: Date.now()
             };
             if (editingEventId) {
+                // Se admin editar, vira 'active'
+                if (isAdmin) data.status = 'active';
+                // Preserva participantes
+                const oldEvent = allEvents.find(e => e.id === editingEventId);
+                if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
+
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data);
                 editingEventId = null;
+                editingEventAuthor = null;
             } else {
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data);
             }
@@ -931,6 +955,7 @@
         window.editClanEvent = (id) => {
             const ev = allEvents.find(e => e.id === id);
             editingEventId = id;
+            editingEventAuthor = ev.suggestedBy; // Salva o autor original
             document.getElementById('ev-title').value = ev.title;
             document.getElementById('ev-theme').value = ev.theme;
             document.getElementById('ev-date').value = ev.date;
@@ -1479,7 +1504,12 @@
             s.innerHTML = h;
         };
         
-        window.openCreateModal = () => { editingEventId = null; document.getElementById('modal-admin-event-form').reset(); window.openModal('modal-admin-event'); };
+        window.openCreateModal = () => { 
+            editingEventId = null; 
+            editingEventAuthor = null;
+            document.getElementById('modal-admin-event-form').reset(); 
+            window.openModal('modal-admin-event'); 
+        };
     </script>
 </head>
 <body class="min-h-screen text-slate-800 pb-20">
