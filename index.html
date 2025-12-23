@@ -49,7 +49,8 @@
         let allApplications = [];
         let allIdentities = [];
         let allMissions = [];
-        let allGiveaways = []; // Lista de sorteios
+        let allGiveaways = []; 
+        let hiddenStaticMembers = []; // Lista de membros estáticos removidos
         let isRecruitmentOpen = true; 
         
         let editingEventId = null;
@@ -57,7 +58,8 @@
         let allianceToDeleteId = null;
         let applicationToDeleteId = null;
         let missionToDeleteId = null;
-        let giveawayToDeleteId = null; // ID para deletar sorteio
+        let giveawayToDeleteId = null;
+        let memberToDelete = null; // Objeto para armazenar dados do membro a excluir
         
         const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
         const INVITE_CODE_MEMBER = "senhadificil"; 
@@ -301,7 +303,6 @@
                 .filter(app => app.status === 'aprovado')
                 .map(app => {
                     const tags = [];
-                    // Mapeamento automático de tags
                     const combat = (app.combate || '').toLowerCase();
                     if(combat.includes('cpvp') || combat.includes('ambos')) tags.push('cpvp');
                     if(combat.includes('spvp') || combat.includes('ambos')) tags.push('spvp');
@@ -313,25 +314,26 @@
                     const farm = (app.farm || '').toLowerCase();
                     if(farm.includes('sou bom') || farm.includes('básico')) tags.push('farm');
 
-                    // Prioridade para tags específicas se o array estiver vazio
                     if(tags.length === 0) tags.push('membro');
 
                     return {
+                        id: app.id, // ID do doc no Firestore
                         nick: app.nick,
-                        role: null, // Membros aprovados não são líderes por padrão
+                        role: null,
                         tags: tags,
                         aniv: app.aniversario || 'N/I',
                         disp: app.horarios || app.tempo + 'h',
                         img: `https://ui-avatars.com/api/?name=${app.nick}&background=f9a8d4&color=fff`,
-                        isNew: true // Flag para identificar novos
+                        isStatic: false
                     };
                 });
 
-            // 2. Combinar com membros estáticos (evitar duplicatas pelo nick)
-            const combinedMembers = [...STATIC_MEMBERS];
+            // 2. Combinar com membros estáticos (filtrando os ocultos)
+            const visibleStaticMembers = STATIC_MEMBERS.filter(m => !hiddenStaticMembers.includes(m.nick)).map(m => ({...m, isStatic: true}));
+            
+            const combinedMembers = [...visibleStaticMembers];
             
             approvedMembers.forEach(newM => {
-                // Só adiciona se não existir no estático (para não duplicar se alguém recrutar um membro antigo)
                 if (!combinedMembers.some(m => m.nick.toLowerCase() === newM.nick.toLowerCase())) {
                     combinedMembers.push(newM);
                 }
@@ -341,8 +343,9 @@
 
             grid.innerHTML = '';
             
+            const isLuhnny = currentUser && currentUser.name === "Luhnny";
+
             combinedMembers.forEach(m => {
-                // Gerar HTML das tags
                 let tagsHtml = '';
                 if(m.role) tagsHtml += `<span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">${m.role}</span>`;
                 
@@ -357,9 +360,14 @@
                     tagsHtml += `<span class="px-2 py-1 ${color} text-[10px] uppercase rounded-full font-bold">${t}</span>`;
                 });
 
-                // HTML do Card
+                // Botão de deletar para Luhnny
+                const deleteBtn = isLuhnny ? 
+                    `<button onclick='window.requestDeleteMember(${JSON.stringify(m)})' class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition z-10"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` 
+                    : '';
+
                 const card = `
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">
+                <div class="relative bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">
+                    ${deleteBtn}
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold ${m.role === 'Líder' ? 'text-pink-600' : 'text-pink-500'} flex items-center gap-2">
                             ${m.nick} ${m.role === 'Líder' ? '<i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>' : ''}
@@ -378,6 +386,41 @@
                 grid.innerHTML += card;
             });
             lucide.createIcons();
+        };
+
+        // --- LÓGICA DE EXCLUSÃO DE MEMBROS ---
+        window.requestDeleteMember = (member) => {
+            memberToDelete = member;
+            window.openModal('modal-confirm-member-delete');
+        };
+
+        window.confirmMemberDelete = async () => {
+            if (!memberToDelete) return;
+            
+            try {
+                if (memberToDelete.isStatic) {
+                    // Adiciona à lista de ocultos no Firestore
+                    const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members');
+                    const snap = await getDoc(settingsRef);
+                    let currentList = [];
+                    if (snap.exists()) currentList = snap.data().nicks || [];
+                    
+                    if (!currentList.includes(memberToDelete.nick)) {
+                        await setDoc(settingsRef, { nicks: [...currentList, memberToDelete.nick] });
+                    }
+                } else {
+                    // Membro dinâmico: muda status para 'removed' no documento original
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', memberToDelete.id), {
+                        status: 'removed'
+                    });
+                }
+                window.notify(`Membro ${memberToDelete.nick} removido.`, "success");
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao remover membro.", "error");
+            }
+            window.closeModal('modal-confirm-member-delete');
+            memberToDelete = null;
         };
 
         // --- SISTEMA DE MISSÕES ---
@@ -750,9 +793,15 @@
             const a = allAlliances.find(x => x.id === id); 
             if(a) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); 
         };
+        // Função de deletar identidade atualizada com tratamento de erro
         window.deleteIdentity = async (n) => { 
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); 
-            window.notify("Vínculo removido.", "info"); 
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); 
+                window.notify("Vínculo removido.", "info"); 
+            } catch (e) {
+                console.error("Erro ao deletar:", e);
+                window.notify("Erro ao remover: " + e.message, "error");
+            }
         };
         window.requestDeleteAlliance = (id) => { allianceToDeleteId = id; window.openModal('modal-confirm-alliance-delete'); };
         window.confirmAllianceDelete = async () => { 
@@ -761,6 +810,7 @@
             window.closeModal('modal-confirm-alliance-delete'); 
         };
 
+        // Função de renderizar identidades refatorada e desacoplada
         window.renderIdentities = function() {
             const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
             const allyIdenC = document.getElementById('ally-identities-section');
@@ -768,40 +818,42 @@
             const memIdenC = document.getElementById('member-identities-section');
             const memIdenL = document.getElementById('member-identities-list');
 
-            if (isAdmin) {
-                // Safeguard against missing nick
-                const members = allIdentities.filter(i => {
-                    const nick = i.nick || "";
-                    return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase());
-                });
-                
-                // Allies are everyone else
-                const allies = allIdentities.filter(i => !members.includes(i));
-
-                if (allyIdenC && allyIdenL) {
-                    allyIdenC.classList.remove('hidden');
-                    allyIdenL.innerHTML = '';
-                    if (allies.length === 0) allyIdenL.innerHTML = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>';
-                    else {
-                        allies.forEach(i => {
-                            allyIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
-                        });
-                    }
-                }
-
-                if (memIdenC && memIdenL) {
-                    memIdenC.classList.remove('hidden');
-                    memIdenL.innerHTML = '';
-                    if (members.length === 0) memIdenL.innerHTML = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>';
-                    else {
-                        members.forEach(i => {
-                            memIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
-                        });
-                    }
-                }
-            } else {
+            if (!isAdmin) {
                 if(allyIdenC) allyIdenC.classList.add('hidden');
                 if(memIdenC) memIdenC.classList.add('hidden');
+                return;
+            }
+
+            // Filtragem segura
+            const members = allIdentities.filter(i => {
+                const nick = i.nick || "";
+                return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase());
+            });
+            
+            const allies = allIdentities.filter(i => !members.includes(i));
+
+            if (allyIdenC && allyIdenL) {
+                allyIdenC.classList.remove('hidden');
+                let alliesHtml = '';
+                if (allies.length === 0) alliesHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>';
+                else {
+                    allies.forEach(i => {
+                        alliesHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
+                    });
+                }
+                allyIdenL.innerHTML = alliesHtml;
+            }
+
+            if (memIdenC && memIdenL) {
+                memIdenC.classList.remove('hidden');
+                let membersHtml = '';
+                if (members.length === 0) membersHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>';
+                else {
+                    members.forEach(i => {
+                        membersHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
+                    });
+                }
+                memIdenL.innerHTML = membersHtml;
             }
             lucide.createIcons();
         };
@@ -827,8 +879,7 @@
                     reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`;
                 });
             } else reqC?.classList.add('hidden');
-
-            window.renderIdentities();
+            // Removida chamada redundante de renderIdentities daqui
         };
 
         // --- RECRUTAMENTO ---
@@ -962,6 +1013,10 @@
         onAuthStateChanged(auth, async (u) => {
             if (!u) await signInAnonymously(auth);
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) isRecruitmentOpen = s.data().isOpen; window.updateUI(); });
+            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members'), (s) => { 
+                hiddenStaticMembers = s.exists() ? (s.data().nicks || []) : []; 
+                window.renderMembers(); 
+            });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), (s) => { allMissions = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderMissions(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
@@ -1327,6 +1382,17 @@
     <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <div id="modal-confirm-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+    <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all">
+            <h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3>
+            <p class="text-sm text-slate-500 mb-6">Esta ação removerá o membro da lista visível.</p>
+            <div class="flex gap-4">
+                <button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button>
+                <button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>
