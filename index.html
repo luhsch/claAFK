@@ -1243,8 +1243,23 @@
             lucide.createIcons();
         };
 
-        window.submitRecruitment = async () => {
+        // --- FUNÇÃO 1: Solicita a revisão (Chamada pelo Form) ---
+        window.requestRecruitmentReview = () => {
             if (!isRecruitmentOpen) return;
+
+            const today = new Date().toDateString();
+            const lastSub = localStorage.getItem('afk_last_submission_date');
+            
+            if (lastSub === today) {
+                return window.notify("Você já enviou um formulário hoje. Tente novamente amanhã.", "error", true);
+            }
+
+            // Se passou nas verificações, abre o modal de confirmação
+            window.openModal('modal-review-recruitment');
+        };
+
+        // --- FUNÇÃO 2: Envio Real (Chamada pelo Modal de Confirmação) ---
+        window.confirmRecruitmentSubmission = async () => {
             const data = {
                 nick: document.getElementById('rec-nick').value.trim(),
                 discord: document.getElementById('rec-discord').value.trim(),
@@ -1262,12 +1277,16 @@
                 status: 'pendente',
                 createdAt: Date.now()
             };
+            
             // Salva o documento e pega a referência
             const docRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data);
             
             // Salva o ID no LocalStorage para persistência no computador
+            const today = new Date().toDateString();
             localStorage.setItem('afk_recruitment_id', docRef.id);
+            localStorage.setItem('afk_last_submission_date', today);
             
+            window.closeModal('modal-review-recruitment');
             window.notify("Enviado com sucesso!", "success", false);
             document.getElementById('form-recruitment').reset();
             
@@ -1596,7 +1615,7 @@
                 <div id="my-recruitment-status"></div>
 
                 <h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2>
-                <form id="form-recruitment" onsubmit="event.preventDefault(); window.submitRecruitment();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                <form id="form-recruitment" onsubmit="event.preventDefault(); window.requestRecruitmentReview();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Discord*:</label><input type="text" id="rec-discord" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
@@ -1815,6 +1834,19 @@
             <div class="flex gap-4">
                 <button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button>
                 <button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Revisão de Recrutamento -->
+    <div id="modal-review-recruitment" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all border-4 border-pink-100">
+            <div class="mb-4 text-pink-500 flex justify-center"><i data-lucide="alert-triangle" class="w-12 h-12"></i></div>
+            <h3 class="text-xl font-extrabold mb-2 text-slate-800 uppercase tracking-tighter leading-tight">Muita Atenção!</h3>
+            <p class="text-sm text-slate-600 mb-6 leading-relaxed">Você revisou todos os campos? <br><strong>Não será possível editar</strong> as informações após o envio.</p>
+            <div class="flex flex-col gap-3">
+                <button onclick="window.confirmRecruitmentSubmission()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase tracking-wider">Sim, Enviar Agora</button>
+                <button onclick="window.closeModal('modal-review-recruitment')" class="w-full bg-white border-2 border-slate-200 text-slate-500 font-bold py-3 rounded-xl transition leading-tight hover:border-pink-300 hover:text-pink-500 uppercase">Vou Revisar</button>
             </div>
         </div>
     </div>
