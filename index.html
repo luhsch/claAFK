@@ -52,6 +52,7 @@
         let allMissions = [];
         let allGiveaways = []; 
         let hiddenStaticMembers = []; 
+        let memberDetailsOverrides = {}; // Armazena edições de membros (Aniv, Disp, Tags)
         let isRecruitmentOpen = true; 
         
         // Flags para controlar notificações iniciais
@@ -67,11 +68,13 @@
         let clanEventToDeleteId = null; // ID para deletar evento do clã
         let allianceToDeleteId = null;
         let applicationToDeleteId = null;
+        let applicationToDeleteStatus = null; // Nova variável para controlar o status ao deletar
         let missionToDeleteId = null;
         let giveawayToDeleteId = null;
         let memberToDelete = null; 
         
         let editingGiveawayId = null; // Variável para controlar edição de sorteio
+        let editingMemberNick = null; // Variável para controlar qual membro está sendo editado
 
         // Variaveis para preservar o autor original ao editar
         let editingEventAuthor = null;
@@ -91,7 +94,7 @@
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
             "baiano019", "Raitzz_", "Invisivel", "NeverPuzzle", "chorapropai", 
-            "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14", "zKingPrime"
+            "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14", "zKingPrime", "PyromaniacVV"
         ];
 
         // --- DADOS ESTÁTICOS DOS MEMBROS (Membros originais do clã) ---
@@ -114,7 +117,8 @@
             { nick: "TheP1nk", tags: ["pvp", "cpvp", "builder"], aniv: "10/07", disp: "Tarde e Noite", img: "thep1nk.png" },
             { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
             { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" },
-            { nick: "zKingPrime", tags: ["spvp", "cpvp"], aniv: "09/10", disp: "Toda hora", img: "zkingprime.png" }
+            { nick: "zKingPrime", tags: ["spvp", "cpvp"], aniv: "09/10", disp: "Toda hora", img: "zkingprime.png" },
+            { nick: "PyromaniacVV", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "pyromaniacvv.png" }
         ];
 
         // --- FUNÇÕES UTILITÁRIAS GLOBAIS ---
@@ -338,6 +342,20 @@
             const countEl = document.getElementById('members-count');
             if(!grid) return;
             
+            // Helper para mesclar dados com overrides
+            const getMemberData = (baseData) => {
+                const override = memberDetailsOverrides[baseData.nick.toLowerCase()];
+                if (override) {
+                    return {
+                        ...baseData,
+                        aniv: override.aniv || baseData.aniv,
+                        disp: override.disp || baseData.disp,
+                        tags: override.tags ? override.tags : baseData.tags
+                    };
+                }
+                return baseData;
+            };
+
             const approvedMembers = allApplications
                 .filter(app => app.status === 'aprovado')
                 .map(app => {
@@ -355,7 +373,7 @@
 
                     if(tags.length === 0) tags.push('membro');
 
-                    return {
+                    return getMemberData({
                         id: app.id, 
                         nick: app.nick,
                         role: null,
@@ -364,10 +382,12 @@
                         disp: app.horarios || app.tempo + 'h',
                         img: `https://ui-avatars.com/api/?name=${app.nick}&background=f9a8d4&color=fff`,
                         isStatic: false
-                    };
+                    });
                 });
 
-            const visibleStaticMembers = STATIC_MEMBERS.filter(m => !hiddenStaticMembers.includes(m.nick)).map(m => ({...m, isStatic: true}));
+            const visibleStaticMembers = STATIC_MEMBERS
+                .filter(m => !hiddenStaticMembers.includes(m.nick))
+                .map(m => getMemberData({...m, isStatic: true}));
             
             const combinedMembers = [...visibleStaticMembers];
             
@@ -389,23 +409,31 @@
                 
                 (m.tags || []).forEach(t => {
                     let color = 'bg-slate-100 text-slate-600';
-                    if (t === 'cpvp') color = 'bg-red-100 text-red-600';
-                    if (t === 'spvp') color = 'bg-blue-100 text-blue-600';
-                    if (t === 'builder' || t === 'build' || t === 'builder') color = 'bg-yellow-100 text-yellow-600';
-                    if (t === 'farm') color = 'bg-green-100 text-green-600';
-                    if (t === 'pvp') color = 'bg-purple-100 text-purple-600';
-                    if (t === 'eventos') color = 'bg-purple-100 text-purple-600';
+                    const tl = t.toLowerCase();
+                    if (tl === 'cpvp') color = 'bg-red-100 text-red-600';
+                    if (tl === 'spvp') color = 'bg-blue-100 text-blue-600';
+                    if (tl === 'builder' || tl === 'build' || tl === 'construção') color = 'bg-yellow-100 text-yellow-600';
+                    if (tl === 'farm') color = 'bg-green-100 text-green-600';
+                    if (tl === 'pvp') color = 'bg-purple-100 text-purple-600';
+                    if (tl === 'eventos') color = 'bg-purple-100 text-purple-600';
+                    if (tl === 'membro') color = 'bg-slate-200 text-slate-500';
                     
                     tagsHtml += `<span class="px-2 py-1 ${color} text-[10px] uppercase rounded-full font-bold">${t}</span>`;
                 });
 
-                const deleteBtn = isLuhnny ? 
-                    `<button onclick='window.requestDeleteMember(${JSON.stringify(m)})' class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition z-10"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` 
-                    : '';
+                let adminBtns = '';
+                if (isLuhnny) {
+                    adminBtns = `
+                        <div class="absolute top-4 right-4 flex gap-1 z-10">
+                            <button onclick='window.openEditMemberModal(${JSON.stringify(m)})' class="p-1.5 bg-white text-blue-400 hover:text-blue-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                            <button onclick='window.requestDeleteMember(${JSON.stringify(m)})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                    `;
+                }
 
                 const card = `
                 <div class="relative bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">
-                    ${deleteBtn}
+                    ${adminBtns}
                     <div class="flex justify-between items-start mb-4">
                         <h3 class="text-xl font-bold ${m.role === 'Líder' ? 'text-pink-600' : 'text-pink-500'} flex items-center gap-2">
                             ${m.nick} ${m.role === 'Líder' ? '<i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>' : ''}
@@ -424,6 +452,45 @@
                 grid.innerHTML += card;
             });
             lucide.createIcons();
+        };
+
+        // --- SISTEMA DE EDIÇÃO DE MEMBROS (LUHNNY) ---
+        window.openEditMemberModal = (member) => {
+            editingMemberNick = member.nick;
+            document.getElementById('edit-mem-nick').innerText = member.nick;
+            document.getElementById('edit-mem-aniv').value = member.aniv;
+            document.getElementById('edit-mem-disp').value = member.disp;
+            // Converte array de tags para string separada por virgula
+            document.getElementById('edit-mem-tags').value = (member.tags || []).join(', ');
+            
+            window.openModal('modal-edit-member');
+        };
+
+        window.saveMemberEdit = async () => {
+            if (!editingMemberNick) return;
+
+            const aniv = document.getElementById('edit-mem-aniv').value.trim();
+            const disp = document.getElementById('edit-mem-disp').value.trim();
+            const tagsStr = document.getElementById('edit-mem-tags').value.trim();
+            
+            // Processa as tags: remove espaços extras e cria array
+            const tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
+
+            const updateData = {
+                aniv,
+                disp,
+                tags
+            };
+
+            try {
+                // Salva na coleção de detalhes auxiliares (usando nick lowercase como ID)
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'member_details', editingMemberNick.toLowerCase()), updateData);
+                window.notify(`Dados de ${editingMemberNick} atualizados!`, "success", false);
+                window.closeModal('modal-edit-member');
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao salvar alterações.", "error", false);
+            }
         };
 
         // --- LÓGICA DE EXCLUSÃO DE MEMBROS ---
@@ -1174,8 +1241,30 @@
             window.notify(`Pedido ${status}!`, "success", false);
         };
 
-        window.requestDeleteApplication = (id) => { applicationToDeleteId = id; window.openModal('modal-confirm-rec-delete'); };
-        window.confirmRecDelete = async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.closeModal('modal-confirm-rec-delete'); window.notify("Candidatura removida.", "success", false); };
+        // Função de deletar modificada para aceitar status
+        window.requestDeleteApplication = (id, status) => { 
+            applicationToDeleteId = id; 
+            applicationToDeleteStatus = status; // Salva o status para decidir se arquiva ou deleta
+            window.openModal('modal-confirm-rec-delete'); 
+        };
+
+        window.confirmRecDelete = async () => { 
+            if (!applicationToDeleteId) return;
+
+            // Se for aprovado, apenas arquiva (esconde da lista admin) mas mantêm o doc
+            if (applicationToDeleteStatus === 'aprovado') {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId), {
+                    archived: true
+                });
+                window.notify("Candidatura arquivada da lista. O membro continua ativo!", "success", false);
+            } else {
+                // Se for pendente, negado, ou outro, deleta de verdade
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); 
+                window.notify("Candidatura removida permanentemente.", "success", false); 
+            }
+            
+            window.closeModal('modal-confirm-rec-delete'); 
+        };
 
         window.toggleRecruitmentStatus = async () => {
             if (currentUser?.name !== "Luhnny") return;
@@ -1186,12 +1275,18 @@
         window.renderAdminApplications = function() {
             const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
             c.innerHTML = '';
-            if (allApplications.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido recebido.</p>'; }
+            
+            // Filtra arquivados para não poluir a lista
+            const visibleApps = allApplications.filter(app => !app.archived);
+
+            if (visibleApps.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido ativo.</p>'; }
             else {
-                allApplications.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => {
+                visibleApps.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => {
                     const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' };
                     const decisor = app.handledBy ? `<div class="mt-4 pt-2 border-t text-[11px] font-bold text-pink-500 uppercase">Decidido por: ${app.handledBy}</div>` : '';
-                    c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-sm text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div><div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-sm">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${decisor}</div>`;
+                    
+                    // Passa o status para a função de deletar
+                    c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-sm text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div><div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-sm">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}', '${app.status}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${decisor}</div>`;
                 });
             }
             lucide.createIcons();
@@ -1557,6 +1652,15 @@
                 window.renderIdentities(); 
             });
             
+            // Detalhes dos Membros (Overrides)
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'member_details'), (s) => {
+                memberDetailsOverrides = {};
+                s.docs.forEach(d => {
+                    memberDetailsOverrides[d.id] = d.data();
+                });
+                window.renderMembers();
+            });
+
             // Sorteios - COM SOM
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => {
                 if (!initialGiveawayLoad) {
@@ -2019,15 +2123,30 @@
         </div>
     </div>
 
-    <!-- Modal Revisão de Recrutamento -->
-    <div id="modal-review-recruitment" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all border-4 border-pink-100">
-            <div class="mb-4 text-pink-500 flex justify-center"><i data-lucide="alert-triangle" class="w-12 h-12"></i></div>
-            <h3 class="text-xl font-extrabold mb-2 text-slate-800 uppercase tracking-tighter leading-tight">Muita Atenção!</h3>
-            <p class="text-sm text-slate-600 mb-6 leading-relaxed">Você revisou todos os campos? <br><strong>Não será possível editar</strong> as informações após o envio.</p>
-            <div class="flex flex-col gap-3">
-                <button onclick="window.confirmRecruitmentSubmission()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase tracking-wider">Sim, Enviar Agora</button>
-                <button onclick="window.closeModal('modal-review-recruitment')" class="w-full bg-white border-2 border-slate-200 text-slate-500 font-bold py-3 rounded-xl transition leading-tight hover:border-pink-300 hover:text-pink-500 uppercase">Vou Revisar</button>
+    <!-- Modal Editar Membro (Luhnny) -->
+    <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all">
+            <h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label>
+                    <input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label>
+                    <input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula):</label>
+                    <input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300" placeholder="Ex: cpvp, builder, farm">
+                    <p class="text-[10px] text-slate-400 mt-1">Tags comuns: cpvp, spvp, builder, farm, pvp, eventos</p>
+                </div>
+            </div>
+
+            <div class="flex gap-4 mt-8">
+                <button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase">Salvar</button>
+                <button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500 uppercase">Cancelar</button>
             </div>
         </div>
     </div>
