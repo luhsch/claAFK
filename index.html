@@ -1091,6 +1091,68 @@
             lucide.createIcons();
         };
 
+        // --- NOVA FUNÇÃO: Renderizar status para o usuário local (sem login) ---
+        window.renderMyRecruitmentStatus = function() {
+            const localId = localStorage.getItem('afk_recruitment_id');
+            const statusContainer = document.getElementById('my-recruitment-status');
+            
+            if (!statusContainer) return;
+            
+            if (!localId) {
+                statusContainer.innerHTML = '';
+                return;
+            }
+
+            // Procura na lista global (que é populada pelo snapshot)
+            const myApp = allApplications.find(a => a.id === localId);
+            
+            if (!myApp) {
+                // Se não achou mas tem ID, pode ter sido deletado
+                statusContainer.innerHTML = `
+                    <div class="mb-8 p-6 bg-slate-100 rounded-3xl border-2 border-slate-200 text-center">
+                        <h3 class="text-lg font-bold text-slate-500 uppercase mb-1">Status da Candidatura</h3>
+                        <p class="text-slate-400 text-sm">Candidatura não encontrada ou removida.</p>
+                        <button onclick="localStorage.removeItem('afk_recruitment_id'); window.renderMyRecruitmentStatus();" class="mt-4 text-xs font-bold text-pink-400 uppercase hover:text-pink-600">Limpar e tentar novamente</button>
+                    </div>`;
+                return;
+            }
+
+            const colors = { 
+                aprovado: 'bg-green-50 border-green-200 text-green-600', 
+                negado: 'bg-red-50 border-red-200 text-red-600', 
+                pendente: 'bg-yellow-50 border-yellow-200 text-yellow-600' 
+            };
+            
+            const icon = {
+                aprovado: 'check-circle',
+                negado: 'x-circle',
+                pendente: 'clock'
+            };
+            
+            const msg = {
+                aprovado: 'Parabéns! Foste aceito no Clã AFK!',
+                negado: 'Infelizmente sua candidatura não foi aceita desta vez.',
+                pendente: 'A tua candidatura está em análise. Aguarda!'
+            };
+
+            const statusClass = colors[myApp.status] || colors['pendente'];
+            const statusIcon = icon[myApp.status] || 'clock';
+            const statusMsg = msg[myApp.status] || 'Status desconhecido';
+
+            statusContainer.innerHTML = `
+                <div class="mb-10 p-8 rounded-3xl border-2 text-center ${statusClass} shadow-lg transform transition-all">
+                    <div class="flex justify-center mb-4">
+                        <i data-lucide="${statusIcon}" class="w-12 h-12"></i>
+                    </div>
+                    <h3 class="text-2xl font-extrabold uppercase mb-2 tracking-tighter">${myApp.status}</h3>
+                    <p class="font-medium text-lg opacity-90">${statusMsg}</p>
+                    <p class="mt-4 text-xs font-bold opacity-60 uppercase">Nick: ${myApp.nick}</p>
+                    ${myApp.handledBy ? `<p class="mt-1 text-[10px] font-bold opacity-50 uppercase">Analisado por: ${myApp.handledBy}</p>` : ''}
+                </div>
+            `;
+            lucide.createIcons();
+        };
+
         window.updateUI = function() {
             const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
@@ -1140,9 +1202,9 @@
                 // Botão de Evento do Clã (Apenas Luhnny cria direto, mas membros veem sugestão na renderização)
                 // Vamos deixar o botão visível se for membro (para sugestão) ou Luhnny (para criar)
                 if (!currentUser.isAlly) {
-                     aClanEventBtn?.classList.remove('hidden');
+                      aClanEventBtn?.classList.remove('hidden');
                 } else {
-                     aClanEventBtn?.classList.add('hidden');
+                      aClanEventBtn?.classList.add('hidden');
                 }
 
                 // Member features (Everyone except Allies)
@@ -1170,6 +1232,7 @@
             }
 
             window.renderAdminApplications(); 
+            window.renderMyRecruitmentStatus(); // Atualiza o status local
             window.renderAlliances(); 
             window.renderEvents();
             window.renderClanEvents();
@@ -1199,9 +1262,17 @@
                 status: 'pendente',
                 createdAt: Date.now()
             };
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data);
+            // Salva o documento e pega a referência
+            const docRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data);
+            
+            // Salva o ID no LocalStorage para persistência no computador
+            localStorage.setItem('afk_recruitment_id', docRef.id);
+            
             window.notify("Enviado com sucesso!", "success", false);
             document.getElementById('form-recruitment').reset();
+            
+            // Força atualização da UI para mostrar o status imediatamente
+            window.renderMyRecruitmentStatus();
         };
 
         // --- SNAPSHOTS ---
@@ -1230,7 +1301,18 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { 
                 if (!initialEventLoad) {
                     s.docChanges().forEach(change => {
-                        if (change.type === "added") window.notify("🎉 Novo Evento Criado!", "success", true);
+                        const d = change.doc.data();
+                        // Só notifica se for adicionado JÁ como ativo
+                        if (change.type === "added" && d.status === 'active') {
+                            window.notify("🎉 Novo Evento Criado!", "success", true);
+                        }
+                        // Ou se foi modificado de algo não-ativo para ativo (Aprovação)
+                        if (change.type === "modified" && d.status === 'active') {
+                            const old = allEvents.find(e => e.id === change.doc.id);
+                            if (old && old.status !== 'active') {
+                                window.notify("🎉 Novo Evento Criado!", "success", true);
+                            }
+                        }
                     });
                 }
                 allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); 
@@ -1244,7 +1326,16 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), (s) => {
                  if (!initialClanEventLoad) {
                     s.docChanges().forEach(change => {
-                        if (change.type === "added") window.notify("🛡️ Novo Evento do Clã!", "success", true);
+                        const d = change.doc.data();
+                        if (change.type === "added" && d.status === 'active') {
+                            window.notify("🛡️ Novo Evento do Clã!", "success", true);
+                        }
+                        if (change.type === "modified" && d.status === 'active') {
+                            const old = allClanEvents.find(e => e.id === change.doc.id);
+                            if (old && old.status !== 'active') {
+                                window.notify("🛡️ Novo Evento do Clã!", "success", true);
+                            }
+                        }
                     });
                 }
                 allClanEvents = s.docs.map(d => ({id:d.id, ...d.data()}));
@@ -1275,6 +1366,7 @@
                 }
                 allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); 
                 window.renderAdminApplications(); 
+                window.renderMyRecruitmentStatus(); // Atualiza status para user local também
                 window.renderMembers(); 
                 initialRecruitmentListLoad = false;
             });
@@ -1301,6 +1393,8 @@
             });
 
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
+            // Também chama updateUI se não estiver logado para garantir que o renderMyRecruitmentStatus rode
+            if (!saved) window.updateUI();
         });
 
         window.populateAllySelectRegister = () => {
@@ -1498,6 +1592,9 @@
             <div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto transition-all"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-inner"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight tracking-tighter">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed font-medium">Neste momento não estamos a aceitar candidaturas. Tenta mais tarde!</p></div>
 
             <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center">
+                <!-- ÁREA DE STATUS DA MINHA CANDIDATURA (VISÍVEL APENAS SE TIVER ID NO LOCALSTORAGE) -->
+                <div id="my-recruitment-status"></div>
+
                 <h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2>
                 <form id="form-recruitment" onsubmit="event.preventDefault(); window.submitRecruitment();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
