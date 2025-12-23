@@ -69,6 +69,28 @@
             "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14"
         ];
 
+        // --- DADOS ESTÁTICOS DOS MEMBROS (Membros originais do clã) ---
+        const STATIC_MEMBERS = [
+            { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
+            { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
+            { nick: "Lagartuuuxaaa", role: "Co-Líder", tags: ["spvp", "cpvp"], aniv: "01/07", disp: "22h - 02h", img: "lagartuuuxaaa.png" },
+            { nick: "iaruchy", tags: ["cpvp"], aniv: "18/04", disp: "Toda hora", img: "iaruchy.png" },
+            { nick: "1gcy", tags: ["cpvp", "build"], aniv: "05/04", disp: "Toda hora", img: "1gcy.png" },
+            { nick: "Pardas01", tags: ["cpvp", "builder", "farm"], aniv: "16/06", disp: "Tarde e Noite", img: "pardas01.png" },
+            { nick: "baiano019", tags: ["builder"], aniv: "14/05", disp: "Noite", img: "baiano019.png" },
+            { nick: "Raitzz_", tags: ["farm"], aniv: "22/03", disp: "Tarde e Manhã", img: "raitzz_.png" },
+            { nick: "Invisivel", tags: ["spvp", "cpvp", "builder", "farm"], aniv: "28/07", disp: "Noite", img: "invisivel.png" },
+            { nick: "NeverPuzzle", tags: ["spvp", "cpvp", "farm"], aniv: "11/08", disp: "Tarde", img: "neverpuzzle.png" },
+            { nick: "chorapropai", tags: ["cpvp", "farm"], aniv: "10/01", disp: "Variável", img: "chorapropai.png" },
+            { nick: "felpipoca", tags: ["spvp", "farm"], aniv: "21/01", disp: "Dia e Madrugada", img: "felpipoca.png" },
+            { nick: "1aswd", tags: ["spvp", "cpvp", "builder"], aniv: "19/09", disp: "Dia todo", img: "1aswd.png" },
+            { nick: "ynSunn", tags: ["spvp", "builder", "farm"], aniv: "23/08", disp: "Tarde e Noite", img: "ynsunn.png" },
+            { nick: "labubusista", tags: ["spvp", "cpvp", "builder"], aniv: "17/02", disp: "Quase sempre", img: "labubusista.png" },
+            { nick: "TheP1nk", tags: ["pvp", "cpvp", "builder"], aniv: "10/07", disp: "Tarde e Noite", img: "thep1nk.png" },
+            { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
+            { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" }
+        ];
+
         // --- FUNÇÕES UTILITÁRIAS GLOBAIS ---
 
         window.notify = (msg, type) => {
@@ -268,6 +290,96 @@
             lucide.createIcons();
         };
 
+        // --- SISTEMA DE MEMBROS AUTOMÁTICO ---
+        window.renderMembers = () => {
+            const grid = document.getElementById('members-grid'); 
+            const countEl = document.getElementById('members-count');
+            if(!grid) return;
+            
+            // 1. Processar aprovados do recrutamento
+            const approvedMembers = allApplications
+                .filter(app => app.status === 'aprovado')
+                .map(app => {
+                    const tags = [];
+                    // Mapeamento automático de tags
+                    const combat = (app.combate || '').toLowerCase();
+                    if(combat.includes('cpvp') || combat.includes('ambos')) tags.push('cpvp');
+                    if(combat.includes('spvp') || combat.includes('ambos')) tags.push('spvp');
+                    if(combat.includes('pvp')) tags.push('pvp');
+                    
+                    const build = (app.build || '').toLowerCase();
+                    if(build.includes('sou bom') || build.includes('básico')) tags.push('builder');
+                    
+                    const farm = (app.farm || '').toLowerCase();
+                    if(farm.includes('sou bom') || farm.includes('básico')) tags.push('farm');
+
+                    // Prioridade para tags específicas se o array estiver vazio
+                    if(tags.length === 0) tags.push('membro');
+
+                    return {
+                        nick: app.nick,
+                        role: null, // Membros aprovados não são líderes por padrão
+                        tags: tags,
+                        aniv: app.aniversario || 'N/I',
+                        disp: app.horarios || app.tempo + 'h',
+                        img: `https://ui-avatars.com/api/?name=${app.nick}&background=f9a8d4&color=fff`,
+                        isNew: true // Flag para identificar novos
+                    };
+                });
+
+            // 2. Combinar com membros estáticos (evitar duplicatas pelo nick)
+            const combinedMembers = [...STATIC_MEMBERS];
+            
+            approvedMembers.forEach(newM => {
+                // Só adiciona se não existir no estático (para não duplicar se alguém recrutar um membro antigo)
+                if (!combinedMembers.some(m => m.nick.toLowerCase() === newM.nick.toLowerCase())) {
+                    combinedMembers.push(newM);
+                }
+            });
+
+            if(countEl) countEl.innerText = `Total: ${combinedMembers.length} membros registrados`;
+
+            grid.innerHTML = '';
+            
+            combinedMembers.forEach(m => {
+                // Gerar HTML das tags
+                let tagsHtml = '';
+                if(m.role) tagsHtml += `<span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">${m.role}</span>`;
+                
+                (m.tags || []).forEach(t => {
+                    let color = 'bg-slate-100 text-slate-600';
+                    if (t === 'cpvp') color = 'bg-red-100 text-red-600';
+                    if (t === 'spvp') color = 'bg-blue-100 text-blue-600';
+                    if (t === 'builder' || t === 'build') color = 'bg-yellow-100 text-yellow-600';
+                    if (t === 'farm') color = 'bg-green-100 text-green-600';
+                    if (t === 'pvp') color = 'bg-purple-100 text-purple-600';
+                    
+                    tagsHtml += `<span class="px-2 py-1 ${color} text-[10px] uppercase rounded-full font-bold">${t}</span>`;
+                });
+
+                // HTML do Card
+                const card = `
+                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="text-xl font-bold ${m.role === 'Líder' ? 'text-pink-600' : 'text-pink-500'} flex items-center gap-2">
+                            ${m.nick} ${m.role === 'Líder' ? '<i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>' : ''}
+                        </h3>
+                        <img src="${m.img}" onerror="this.src='https://ui-avatars.com/api/?name=${m.nick}&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100">
+                    </div>
+                    <div class="space-y-3 mb-6 flex-grow text-sm">
+                        <div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: ${m.aniv}</div>
+                        <div class="flex items-center gap-3 font-medium text-slate-600">Disponível: ${m.disp}</div>
+                    </div>
+                    <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
+                        ${tagsHtml}
+                    </div>
+                </div>`;
+                
+                grid.innerHTML += card;
+            });
+            lucide.createIcons();
+        };
+
         // --- SISTEMA DE MISSÕES ---
         window.createMission = async () => {
             const objective = document.getElementById('mis-objective').value.trim();
@@ -384,20 +496,17 @@
         };
 
         window.runGiveawayDraw = async (id) => {
-            // Apenas Luhnny pode rodar, mas a validação de UI já ajuda. Segurança extra aqui.
             if (!currentUser || currentUser.name !== "Luhnny") return window.notify("Apenas a Luhnny pode realizar o sorteio.", "error");
             
             const giv = allGiveaways.find(g => g.id === id);
             if (!giv || !giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error");
 
-            // Seleciona vencedor aleatório
             const winner = giv.participants[Math.floor(Math.random() * giv.participants.length)];
 
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
                 winner: winner,
                 status: 'closed'
             });
-            // O update dispara o onSnapshot, que redesenha a tela com o vencedor
         };
 
         window.requestDeleteGiveaway = (id) => {
@@ -425,7 +534,6 @@
                 return;
             }
 
-            // Ordenar: Abertos primeiro, depois por data de criação (mais novos primeiro)
             allGiveaways.sort((a,b) => (a.status === 'open' ? -1 : 1) || b.createdAt - a.createdAt).forEach(g => {
                 const isParticipant = currentUser && (g.participants || []).includes(currentUser.name);
                 const hasWinner = g.winner !== null;
@@ -443,7 +551,6 @@
                         </div>
                     `;
                 } else {
-                    // Sorteio Aberto
                     let joinBtn = '';
                     if (currentUser && !isParticipant) {
                         joinBtn = `<button onclick="window.joinGiveaway('${g.id}')" class="w-full py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>`;
@@ -453,7 +560,6 @@
                         joinBtn = `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
                     }
 
-                    // Botão da Luhnny para sortear
                     let drawBtn = '';
                     if (isLuhnny && pCount > 0) {
                         drawBtn = `<button onclick="window.runGiveawayDraw('${g.id}')" class="w-full mt-3 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Realizar Sorteio</button>`;
@@ -464,7 +570,6 @@
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
                 }
 
-                // Botão de deletar para admins
                 const deleteBtn = isAdmin ? `<button onclick="window.requestDeleteGiveaway('${g.id}')" class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : '';
 
                 list.innerHTML += `
@@ -825,6 +930,7 @@
             window.renderIdentities();
             window.renderMissions();
             window.renderGiveaways();
+            window.renderMembers(); // Chama a nova função de membros
             lucide.createIcons();
         };
 
@@ -860,12 +966,15 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), (s) => { allMissions = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderMissions(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAdminApplications(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { 
+                allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); 
+                window.renderAdminApplications(); 
+                window.renderMembers(); // Atualiza membros quando recrutamento muda
+            });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { 
                 allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); 
                 window.renderIdentities(); 
             });
-            // Novo snapshot para sorteios
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => {
                 allGiveaways = s.docs.map(d => ({id:d.id, ...d.data()}));
                 window.renderGiveaways();
@@ -948,49 +1057,12 @@
 
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2>
-                <div class="text-sm text-pink-400/70 italic font-medium">Total: 18 membros registrados</div>
+                <div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
-                <!-- Luhnny -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-300 flex flex-col scale-105 transform">
-                    <div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-600 flex items-center gap-2">Luhnny <i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i></h3><img src="luhnny.png" onerror="this.src='https://ui-avatars.com/api/?name=Luhnny&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div>
-                    <div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 17/10</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: Manhã e Noite</div></div>
-                    <div class="flex wrap gap-2 pt-4 border-t border-pink-50"><span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">Líder</span><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div>
-                </div>
-                <!-- K0ssh1_ -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">K0ssh1_</h3><img src="k0ssh1.png" onerror="this.src='https://ui-avatars.com/api/?name=K0ssh1&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 27/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 13:30 - 01:30</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
-                <!-- Lagartuuuxaaa -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Lagartuuuxaaa</h3><img src="lagartuuuxaaa.png" onerror="this.src='https://ui-avatars.com/api/?name=Lagartuuuxaaa&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 01/07</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: 22h - 02h</div></div><div class="flex wrap gap-2 pt-4 border-t"><span class="px-3 py-1 bg-pink-400 text-white text-[10px] uppercase rounded-full font-bold">Co-Líder</span><span class="px-3 py-1 bg-blue-100 text-blue-600 text-[10px] font-bold uppercase rounded-full">spvp</span><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
-                <!-- iaruchy -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">iaruchy</h3><img src="iaruchy.png" onerror="this.src='https://ui-avatars.com/api/?name=iaruchy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: 18/04</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: Toda hora</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-red-100 text-red-600 text-[10px] font-bold uppercase rounded-full">cpvp</span></div></div>
-                <!-- 1gcy -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1gcy</h3><img src="1gcy.png" onerror="this.src='https://ui-avatars.com/api/?name=1gcy&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 05/04</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">build</span></div></div>
-                <!-- Pardas01 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Pardas01</h3><img src="pardas01.png" onerror="this.src='https://ui-avatars.com/api/?name=Pardas01&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 16/06</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- baiano019 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">baiano019</h3><img src="baiano019.png" onerror="this.src='https://ui-avatars.com/api/?name=baiano019&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 14/05</div><div>Disponível: Noite</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
-                <!-- Raitzz_ -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Raitzz_</h3><img src="raitzz_.png" onerror="this.src='https://ui-avatars.com/api/?name=Raitzz_&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: Tarde e Manhã</div></div><div class="flex gap-2 border-t pt-4"><span class="px-3 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- Invisivel -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">Invisivel</h3><img src="invisivel.png" onerror="this.src='https://ui-avatars.com/api/?name=Invisivel&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 28/07</div><div>Disponível: Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- NeverPuzzle -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">NeverPuzzle</h3><img src="neverpuzzle.png" onerror="this.src='https://ui-avatars.com/api/?name=NeverPuzzle&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 11/08</div><div>Disponível: Tarde</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- chorapropai -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">chorapropai</h3><img src="chorapropai.png" onerror="this.src='https://ui-avatars.com/api/?name=chorapropai&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/01</div><div>Disponível: Variável</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- felpipoca -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">felpipoca</h3><img src="felpipoca.png" onerror="this.src='https://ui-avatars.com/api/?name=felpipoca&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 21/01</div><div>Disponível: Dia e Madrugada</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- 1aswd -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">1aswd</h3><img src="1aswd.png" onerror="this.src='https://ui-avatars.com/api/?name=1aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 19/09</div><div>Disponível: Dia todo</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
-                <!-- ynSunn -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">ynSunn</h3><img src="ynsunn.png" onerror="this.src='https://ui-avatars.com/api/?name=ynSunn&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 23/08</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- labubusista -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">labubusista</h3><img src="labubusista.png" onerror="this.src='https://ui-avatars.com/api/?name=labubusista&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 17/02</div><div>Disponível: Quase sempre</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
-                <!-- TheP1nk -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">TheP1nk</h3><img src="thep1nk.png" onerror="this.src='https://ui-avatars.com/api/?name=TheP1nk&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 10/07</div><div>Disponível: Tarde e Noite</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-purple-100 text-purple-600 text-[10px] uppercase rounded-full font-bold">pvp</span><span class="px-2 py-1 bg-red-100 text-red-600 text-[10px] uppercase rounded-full font-bold">cpvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span></div></div>
-                <!-- 2aswd -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">2aswd</h3><img src="2aswd.png" onerror="this.src='https://ui-avatars.com/api/?name=2aswd&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 20/05</div><div>Disponível: Toda hora</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-2 py-1 bg-blue-100 text-blue-600 text-[10px] uppercase rounded-full font-bold">spvp</span><span class="px-2 py-1 bg-yellow-100 text-yellow-600 text-[10px] uppercase rounded-full font-bold">builder</span><span class="px-2 py-1 bg-green-100 text-green-600 text-[10px] uppercase rounded-full font-bold">farm</span></div></div>
-                <!-- _Vzkls14 -->
-                <div class="bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col"><div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold text-pink-500">_Vzkls14</h3><img src="vzkls14.png" onerror="this.src='https://ui-avatars.com/api/?name=_Vzkls14&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div>Aniversário: 22/03</div><div>Disponível: 02h-21h</div></div><div class="flex wrap gap-1 border-t pt-4"><span class="px-3 py-1 bg-yellow-100 text-yellow-600 text-[10px] font-bold uppercase rounded-full">builder</span></div></div>
+            
+            <!-- GRID DE MEMBROS (GERADO DINAMICAMENTE) -->
+            <div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
+                <!-- Conteúdo preenchido via JavaScript -->
             </div>
         </div>
 
