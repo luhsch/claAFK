@@ -16,6 +16,7 @@
         .hidden { display: none; }
         @keyframes subtle-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.9; } }
         @keyframes attention-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); transform: scale(1); } 50% { transform: scale(1.05); } 70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); transform: scale(1); } }
+        @keyframes confetti-fall { 0% { transform: translateY(-100%) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(360deg); opacity: 0; } }
         .recruitment-badge { animation: subtle-pulse 3s infinite ease-in-out; }
         .btn-attention { animation: attention-pulse 2s infinite; }
         .modal-bg { background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
@@ -48,6 +49,7 @@
         let allApplications = [];
         let allIdentities = [];
         let allMissions = [];
+        let allGiveaways = []; // Lista de sorteios
         let isRecruitmentOpen = true; 
         
         let editingEventId = null;
@@ -55,6 +57,7 @@
         let allianceToDeleteId = null;
         let applicationToDeleteId = null;
         let missionToDeleteId = null;
+        let giveawayToDeleteId = null; // ID para deletar sorteio
         
         const ADMINS_LIST = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"];
         const INVITE_CODE_MEMBER = "senhadificil"; 
@@ -255,7 +258,7 @@
         // --- INTERFACE E NAVEGAÇÃO ---
 
         window.switchTab = (tab) => {
-            ['apresentacao', 'membros', 'eventos', 'aliancas', 'recrutamento', 'contas', 'missoes'].forEach(t => {
+            ['apresentacao', 'membros', 'eventos', 'aliancas', 'recrutamento', 'contas', 'missoes', 'sorteios'].forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('btn-' + t);
                 if (!el || !btn) return;
@@ -342,6 +345,149 @@
             });
             lucide.createIcons();
         };
+
+        // --- SISTEMA DE SORTEIOS ---
+        window.createGiveaway = async () => {
+            const prize = document.getElementById('giv-prize').value.trim();
+            const date = document.getElementById('giv-date').value;
+            const time = document.getElementById('giv-time').value;
+            
+            if (!prize || !date || !time) return window.notify("Preencha todos os campos do sorteio.", "error");
+
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), {
+                prize,
+                date,
+                time,
+                participants: [],
+                winner: null,
+                status: 'open',
+                createdBy: currentUser.name,
+                createdAt: Date.now()
+            });
+            window.notify("Sorteio Criado!", "success");
+            window.closeModal('modal-create-giveaway');
+            document.getElementById('form-create-giveaway').reset();
+        };
+
+        window.joinGiveaway = async (id) => {
+            if (!currentUser) return;
+            const giv = allGiveaways.find(g => g.id === id);
+            if (!giv) return;
+            
+            const currentParts = giv.participants || [];
+            if (currentParts.includes(currentUser.name)) return window.notify("Você já está participando!", "info");
+
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
+                participants: [...currentParts, currentUser.name]
+            });
+            window.notify("Participação confirmada!", "success");
+        };
+
+        window.runGiveawayDraw = async (id) => {
+            // Apenas Luhnny pode rodar, mas a validação de UI já ajuda. Segurança extra aqui.
+            if (!currentUser || currentUser.name !== "Luhnny") return window.notify("Apenas a Luhnny pode realizar o sorteio.", "error");
+            
+            const giv = allGiveaways.find(g => g.id === id);
+            if (!giv || !giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error");
+
+            // Seleciona vencedor aleatório
+            const winner = giv.participants[Math.floor(Math.random() * giv.participants.length)];
+
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
+                winner: winner,
+                status: 'closed'
+            });
+            // O update dispara o onSnapshot, que redesenha a tela com o vencedor
+        };
+
+        window.requestDeleteGiveaway = (id) => {
+            giveawayToDeleteId = id;
+            window.openModal('modal-confirm-giveaway-delete');
+        };
+
+        window.confirmGiveawayDelete = async () => {
+            if (giveawayToDeleteId) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', giveawayToDeleteId));
+                window.closeModal('modal-confirm-giveaway-delete');
+                window.notify("Sorteio removido.", "success");
+            }
+        };
+
+        window.renderGiveaways = function() {
+            const list = document.getElementById('giveaways-list'); if(!list) return;
+            list.innerHTML = '';
+
+            const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
+            const isLuhnny = currentUser && currentUser.name === "Luhnny";
+
+            if (allGiveaways.length === 0) {
+                list.innerHTML = '<div class="col-span-full text-center p-12 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400 font-medium">Nenhum sorteio ativo no momento. Fique atento!</div>';
+                return;
+            }
+
+            // Ordenar: Abertos primeiro, depois por data de criação (mais novos primeiro)
+            allGiveaways.sort((a,b) => (a.status === 'open' ? -1 : 1) || b.createdAt - a.createdAt).forEach(g => {
+                const isParticipant = currentUser && (g.participants || []).includes(currentUser.name);
+                const hasWinner = g.winner !== null;
+                const pCount = (g.participants || []).length;
+
+                let actionArea = '';
+
+                if (hasWinner) {
+                    actionArea = `
+                        <div class="mt-6 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-200 text-center">
+                            <p class="text-xs font-bold text-yellow-600 uppercase mb-1">O jogador que ganhou é:</p>
+                            <p class="text-2xl font-extrabold text-slate-800 flex justify-center items-center gap-2">
+                                <i data-lucide="trophy" class="w-6 h-6 text-yellow-500"></i> ${g.winner}
+                            </p>
+                        </div>
+                    `;
+                } else {
+                    // Sorteio Aberto
+                    let joinBtn = '';
+                    if (currentUser && !isParticipant) {
+                        joinBtn = `<button onclick="window.joinGiveaway('${g.id}')" class="w-full py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>`;
+                    } else if (currentUser && isParticipant) {
+                        joinBtn = `<div class="w-full py-3 rounded-xl bg-green-50 text-green-600 font-bold border border-green-200 text-center flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> Você está participando</div>`;
+                    } else if (!currentUser) {
+                        joinBtn = `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
+                    }
+
+                    // Botão da Luhnny para sortear
+                    let drawBtn = '';
+                    if (isLuhnny && pCount > 0) {
+                        drawBtn = `<button onclick="window.runGiveawayDraw('${g.id}')" class="w-full mt-3 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Realizar Sorteio</button>`;
+                    } else if (isLuhnny && pCount === 0) {
+                        drawBtn = `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>`;
+                    }
+
+                    actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
+                }
+
+                // Botão de deletar para admins
+                const deleteBtn = isAdmin ? `<button onclick="window.requestDeleteGiveaway('${g.id}')" class="absolute top-4 right-4 text-red-300 hover:text-red-500 transition"><i data-lucide="trash-2" class="w-5 h-5"></i></button>` : '';
+
+                list.innerHTML += `
+                    <div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">
+                        ${deleteBtn}
+                        <div>
+                            <div class="flex items-center gap-2 mb-2 text-pink-500 font-bold text-xs uppercase tracking-wider">
+                                <i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}
+                            </div>
+                            <h3 class="text-2xl font-extrabold text-slate-800 mb-1">${g.prize}</h3>
+                            <p class="text-sm text-slate-500 font-medium">Sorteio organizado por ${g.createdBy}</p>
+                            
+                            <div class="mt-4 flex items-center gap-2 text-sm text-slate-600 font-semibold bg-slate-50 p-2 rounded-lg inline-block">
+                                <i data-lucide="users" class="w-4 h-4 text-pink-400"></i> ${pCount} Participantes
+                            </div>
+                        </div>
+                        ${actionArea}
+                    </div>
+                `;
+            });
+            lucide.createIcons();
+        };
+
 
         // --- GESTÃO DE EVENTOS ---
         window.createEventCard = function(ev, type) {
@@ -544,7 +690,6 @@
                     if (members.length === 0) memIdenL.innerHTML = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>';
                     else {
                         members.forEach(i => {
-                            // Using i.id for deletion ensures we target the document ID, usually same as lowercase nick but safer
                             memIdenL.innerHTML += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
                         });
                     }
@@ -623,6 +768,7 @@
             const aEventBtn = document.getElementById('admin-event-panel');
             const aMissionBtn = document.getElementById('btn-missoes');
             const aMissionAdmin = document.getElementById('admin-mission-controls');
+            const aGiveawayBtn = document.getElementById('btn-admin-giveaway'); // Botão criar sorteio
             const recToggle = document.getElementById('luhnny-recruitment-toggle');
             const recFormS = document.getElementById('recruitment-form-section');
             const recClosedM = document.getElementById('recruitment-closed-message');
@@ -639,11 +785,13 @@
                     recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO";
                     recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`;
                     aMissionAdmin?.classList.remove('hidden');
+                    aGiveawayBtn?.classList.remove('hidden'); // Exibir botão criar sorteio
                 } else {
                     aRecPanel?.classList.add('hidden');
                     aAllyBtn?.classList.add('hidden');
                     recToggle?.classList.add('hidden');
                     aMissionAdmin?.classList.add('hidden');
+                    aGiveawayBtn?.classList.add('hidden');
                 }
 
                 // Member features (Includes Admins, Excludes Allies)
@@ -659,6 +807,7 @@
                 lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden');
                 aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden');
                 aMissionBtn?.classList.add('hidden');
+                aGiveawayBtn?.classList.add('hidden');
             }
 
             if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); }
@@ -675,6 +824,7 @@
             window.renderEvents();
             window.renderIdentities();
             window.renderMissions();
+            window.renderGiveaways();
             lucide.createIcons();
         };
 
@@ -715,6 +865,12 @@
                 allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); 
                 window.renderIdentities(); 
             });
+            // Novo snapshot para sorteios
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => {
+                allGiveaways = s.docs.map(d => ({id:d.id, ...d.data()}));
+                window.renderGiveaways();
+            });
+
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
         });
 
@@ -757,6 +913,7 @@
             <button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button>
             <button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button>
             <button onclick="window.switchTab('missoes')" id="btn-missoes" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Missões</button>
+            <button onclick="window.switchTab('sorteios')" id="btn-sorteios" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Sorteios</button>
             <button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button>
             <button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button>
         </div>
@@ -875,6 +1032,16 @@
                 </button>
             </div>
             <div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+        </div>
+
+        <!-- SORTEIOS (NOVA ABA) -->
+        <div id="tab-sorteios" class="hidden">
+            <div id="btn-admin-giveaway" class="hidden mb-8 text-center">
+                <button onclick="window.openModal('modal-create-giveaway')" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
+                    <i data-lucide="gift"></i> Novo Sorteio
+                </button>
+            </div>
+            <div id="giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div>
         </div>
 
         <!-- ALIANÇAS -->
@@ -1037,6 +1204,31 @@
         </div>
     </div>
 
+    <!-- Modal Criar Sorteio -->
+    <div id="modal-create-giveaway" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Novo Sorteio</h3>
+            <form id="form-create-giveaway" onsubmit="event.preventDefault(); window.createGiveaway();" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Prêmio:</label>
+                    <input type="text" id="giv-prize" placeholder="Ex: VIP no servidor" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Dia:</label>
+                        <input type="date" id="giv-date" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Hora:</label>
+                        <input type="time" id="giv-time" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                    </div>
+                </div>
+                <button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Criar Sorteio</button>
+                <button type="button" onclick="window.closeModal('modal-create-giveaway')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Modais de Confirmação -->
     <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
@@ -1061,6 +1253,8 @@
     <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+    <div id="modal-confirm-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
 </body>
 </html>
