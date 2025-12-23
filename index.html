@@ -1641,10 +1641,13 @@
                     });
                 }
                 allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); 
+                
+                // CORREÇÃO: Marca como carregado ANTES de renderizar para exibir o status imediatamente
+                initialRecruitmentListLoad = false;
+
                 window.renderAdminApplications(); 
                 window.renderMyRecruitmentStatus(); // Atualiza status para user local também
                 window.renderMembers(); 
-                initialRecruitmentListLoad = false;
             });
             
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { 
@@ -1879,12 +1882,13 @@
                 <div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
             </div>
             
+            <!-- ÁREA DE STATUS DA MINHA CANDIDATURA (MOVIDA PARA FORA DO FORMULÁRIO PARA APARECER SEMPRE) -->
+            <div id="my-recruitment-status" class="max-w-3xl mx-auto"></div>
+
             <div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto transition-all"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-inner"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight tracking-tighter">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed font-medium">Neste momento não estamos a aceitar candidaturas. Tenta mais tarde!</p></div>
 
             <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center">
-                <!-- ÁREA DE STATUS DA MINHA CANDIDATURA (VISÍVEL APENAS SE TIVER ID NO LOCALSTORAGE) -->
-                <div id="my-recruitment-status"></div>
-
+                
                 <h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2>
                 <form id="form-recruitment" onsubmit="event.preventDefault(); window.requestRecruitmentReview();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
@@ -2119,6 +2123,19 @@
             <div class="flex gap-4">
                 <button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button>
                 <button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Revisão de Recrutamento -->
+    <div id="modal-review-recruitment" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all border-4 border-pink-100">
+            <div class="mb-4 text-pink-500 flex justify-center"><i data-lucide="alert-triangle" class="w-12 h-12"></i></div>
+            <h3 class="text-xl font-extrabold mb-2 text-slate-800 uppercase tracking-tighter leading-tight">Muita Atenção!</h3>
+            <p class="text-sm text-slate-600 mb-6 leading-relaxed">Você revisou todos os campos? <br><strong>Não será possível editar</strong> as informações após o envio.</p>
+            <div class="flex flex-col gap-3">
+                <button onclick="window.confirmRecruitmentSubmission()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase tracking-wider">Sim, Enviar Agora</button>
+                <button onclick="window.closeModal('modal-review-recruitment')" class="w-full bg-white border-2 border-slate-200 text-slate-500 font-bold py-3 rounded-xl transition leading-tight hover:border-pink-300 hover:text-pink-500 uppercase">Vou Revisar</button>
             </div>
         </div>
     </div>
