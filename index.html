@@ -235,19 +235,29 @@
             if (type === 'member' && inviteCode !== INVITE_CODE_MEMBER) return window.notify("Código de Membro incorreto.", "error");
             if (type === 'ally' && inviteCode !== INVITE_CODE_ALLY) return window.notify("Código de Aliado incorreto.", "error");
 
+            let finalName = nick;
+
             if (type === 'member') {
-                const isAllowed = ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase());
-                if (!isAllowed) return window.notify("Este Nick não está na lista de membros permitidos.", "error");
+                const staticMatch = ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase());
+                // VERIFICAÇÃO DINÂMICA: Procura também na lista de recrutamentos aprovados
+                const recruitMatch = allApplications.find(app => app.nick.toLowerCase() === nick.toLowerCase() && app.status === 'aprovado');
+                
+                if (!staticMatch && !recruitMatch) {
+                    return window.notify("Este Nick não está na lista de membros permitidos e não possui aprovação recente.", "error");
+                }
+                
+                // Usa a formatação correta do nome (Maiúsculas/Minúsculas)
+                finalName = staticMatch || (recruitMatch ? recruitMatch.nick : nick);
             }
 
             try {
-                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nick.toLowerCase());
+                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', finalName.toLowerCase());
                 const userSnap = await getDoc(userRef);
 
                 if (userSnap.exists()) return window.notify("Este usuário já está registrado. Faça login.", "error");
 
                 const userData = {
-                    name: ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase()) || nick, 
+                    name: finalName, 
                     password: pass,
                     role: type,
                     clan: type === 'ally' ? clan : 'AFK',
@@ -259,12 +269,12 @@
                 if (type === 'ally') {
                     let docAlly = allAlliances.find(a => a.name === clan);
                     if (docAlly) {
-                        if (!(docAlly.members || []).includes(nick)) {
-                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', docAlly.id), { members: [...(docAlly.members || []), nick] });
+                        if (!(docAlly.members || []).includes(finalName)) {
+                            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', docAlly.id), { members: [...(docAlly.members || []), finalName] });
                         }
                     } else {
                         const tag = clan.substring(0, 4).toUpperCase();
-                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: clan, tag, members: [nick], createdAt: Date.now() });
+                        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: clan, tag, members: [finalName], createdAt: Date.now() });
                     }
                 }
 
@@ -794,7 +804,6 @@
             const a = allAlliances.find(x => x.id === id); 
             if(a) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); 
         };
-        // Função de deletar identidade atualizada com tratamento de erro
         window.deleteIdentity = async (n) => { 
             try {
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); 
@@ -811,7 +820,6 @@
             window.closeModal('modal-confirm-alliance-delete'); 
         };
 
-        // Função de renderizar identidades refatorada e desacoplada
         window.renderIdentities = function() {
             const isAdmin = currentUser && ADMINS_LIST.includes(currentUser.name);
             const allyIdenC = document.getElementById('ally-identities-section');
