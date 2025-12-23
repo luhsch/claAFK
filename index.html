@@ -1092,30 +1092,36 @@
         };
 
         // --- NOVA FUNÇÃO: Renderizar status para o usuário local (sem login) ---
+        let recruitmentTimerInterval = null;
+
         window.renderMyRecruitmentStatus = function() {
             const localId = localStorage.getItem('afk_recruitment_id');
             const statusContainer = document.getElementById('my-recruitment-status');
             
             if (!statusContainer) return;
             
+            // Se não tem ID local, não mostra nada
             if (!localId) {
                 statusContainer.innerHTML = '';
+                if(recruitmentTimerInterval) clearInterval(recruitmentTimerInterval);
                 return;
             }
 
-            // Procura na lista global (que é populada pelo snapshot)
-            const myApp = allApplications.find(a => a.id === localId);
-            
-            if (!myApp) {
-                // Se não achou mas tem ID, pode ter sido deletado
-                statusContainer.innerHTML = `
-                    <div class="mb-8 p-6 bg-slate-100 rounded-3xl border-2 border-slate-200 text-center">
-                        <h3 class="text-lg font-bold text-slate-500 uppercase mb-1">Status da Candidatura</h3>
-                        <p class="text-slate-400 text-sm">Candidatura não encontrada ou removida.</p>
-                        <button onclick="localStorage.removeItem('afk_recruitment_id'); window.renderMyRecruitmentStatus();" class="mt-4 text-xs font-bold text-pink-400 uppercase hover:text-pink-600">Limpar e tentar novamente</button>
-                    </div>`;
+            // Se a lista ainda está carregando, mostra loading simples
+            if (initialRecruitmentListLoad) {
+                statusContainer.innerHTML = '<div class="mb-10 text-slate-400 italic text-sm">Verificando status...</div>';
                 return;
             }
+
+            // Procura na lista global
+            let myApp = allApplications.find(a => a.id === localId);
+            
+            // LÓGICA DE STATUS:
+            // Se não achou (excluído) OU se o status é explicitamente 'negado' -> Trata como NEGADO
+            // Se achou -> usa o status real
+            let displayStatus = myApp ? myApp.status : 'negado'; 
+            let displayNick = myApp ? myApp.nick : 'Candidato';
+            let displayHandledBy = myApp ? myApp.handledBy : null;
 
             const colors = { 
                 aprovado: 'bg-green-50 border-green-200 text-green-600', 
@@ -1135,19 +1141,69 @@
                 pendente: 'A tua candidatura está em análise. Aguarda!'
             };
 
-            const statusClass = colors[myApp.status] || colors['pendente'];
-            const statusIcon = icon[myApp.status] || 'clock';
-            const statusMsg = msg[myApp.status] || 'Status desconhecido';
+            const statusClass = colors[displayStatus] || colors['pendente'];
+            const statusIcon = icon[displayStatus] || 'clock';
+            const statusMsg = msg[displayStatus] || 'Status desconhecido';
+
+            // Verifica se pode tentar novamente (apenas se for NEGADO/EXCLUÍDO)
+            let actionHtml = '';
+            if (displayStatus === 'negado') {
+                const today = new Date().toDateString();
+                const lastSub = localStorage.getItem('afk_last_submission_date');
+                
+                if (lastSub !== today) {
+                    // Já passou o dia, libera botão
+                    actionHtml = `
+                        <div class="mt-6 pt-6 border-t border-red-200">
+                            <p class="text-xs font-bold text-red-400 uppercase mb-2">Você já pode tentar novamente!</p>
+                            <button onclick="localStorage.removeItem('afk_recruitment_id'); window.renderMyRecruitmentStatus();" class="bg-white border-2 border-red-200 text-red-500 px-6 py-2 rounded-xl font-bold shadow-sm hover:bg-red-50 transition uppercase text-xs">Nova Candidatura</button>
+                        </div>
+                    `;
+                } else {
+                    // Ainda é o mesmo dia, mostra contador
+                    actionHtml = `
+                        <div class="mt-6 pt-6 border-t border-red-200">
+                            <p class="text-[10px] font-bold text-red-400 uppercase mb-1">Próxima tentativa em:</p>
+                            <div id="recruitment-countdown" class="text-xl font-mono font-bold text-red-500">Calculando...</div>
+                        </div>
+                    `;
+                    
+                    // Inicia Timer
+                    if(recruitmentTimerInterval) clearInterval(recruitmentTimerInterval);
+                    const updateTimer = () => {
+                        const now = new Date();
+                        const tomorrow = new Date(now);
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        tomorrow.setHours(0, 0, 0, 0);
+                        
+                        const diff = tomorrow - now;
+                        if (diff <= 0) {
+                            window.renderMyRecruitmentStatus(); // Atualiza para mostrar botão
+                            return;
+                        }
+                        
+                        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                        
+                        const el = document.getElementById('recruitment-countdown');
+                        if(el) el.innerText = `${hours}h ${minutes}m ${seconds}s`;
+                    };
+                    updateTimer();
+                    recruitmentTimerInterval = setInterval(updateTimer, 1000);
+                }
+            }
 
             statusContainer.innerHTML = `
                 <div class="mb-10 p-8 rounded-3xl border-2 text-center ${statusClass} shadow-lg transform transition-all">
                     <div class="flex justify-center mb-4">
                         <i data-lucide="${statusIcon}" class="w-12 h-12"></i>
                     </div>
-                    <h3 class="text-2xl font-extrabold uppercase mb-2 tracking-tighter">${myApp.status}</h3>
-                    <p class="font-medium text-lg opacity-90">${statusMsg}</p>
-                    <p class="mt-4 text-xs font-bold opacity-60 uppercase">Nick: ${myApp.nick}</p>
-                    ${myApp.handledBy ? `<p class="mt-1 text-[10px] font-bold opacity-50 uppercase">Analisado por: ${myApp.handledBy}</p>` : ''}
+                    <h3 class="text-2xl font-extrabold uppercase mb-2 tracking-tighter">${displayStatus.toUpperCase()}</h3>
+                    <p class="font-medium text-lg opacity-90 leading-tight">${statusMsg}</p>
+                    <p class="mt-4 text-xs font-bold opacity-60 uppercase">Nick: ${displayNick}</p>
+                    ${displayHandledBy ? `<p class="mt-1 text-[10px] font-bold opacity-50 uppercase">Analisado por: ${displayHandledBy}</p>` : ''}
+                    ${actionHtml}
                 </div>
             `;
             lucide.createIcons();
