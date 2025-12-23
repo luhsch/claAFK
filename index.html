@@ -77,14 +77,15 @@
         const INVITE_CODE_MEMBER = "senhadificil"; 
         const INVITE_CODE_ALLY = "123alianca";
 
+        // SrLordM e Bone removidos daqui pois não são membros comuns
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
             "baiano019", "Raitzz_", "Invisivel", "NeverPuzzle", "chorapropai", 
-            "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14",
-            "SrLordM", "Bone"
+            "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14"
         ];
 
-        // --- DADOS ESTÁTICOS DOS MEMBROS ---
+        // --- DADOS ESTÁTICOS DOS MEMBROS (Membros originais do clã) ---
+        // SrLordM e Bone removidos da lista visual
         const STATIC_MEMBERS = [
             { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
             { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
@@ -103,9 +104,7 @@
             { nick: "labubusista", tags: ["spvp", "cpvp", "builder"], aniv: "17/02", disp: "Quase sempre", img: "labubusista.png" },
             { nick: "TheP1nk", tags: ["pvp", "cpvp", "builder"], aniv: "10/07", disp: "Tarde e Noite", img: "thep1nk.png" },
             { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
-            { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" },
-            { nick: "SrLordM", tags: ["eventos"], aniv: "N/I", disp: "N/I", img: "https://ui-avatars.com/api/?name=SrLordM&background=f9a8d4&color=fff" },
-            { nick: "Bone", tags: ["eventos"], aniv: "N/I", disp: "N/I", img: "https://ui-avatars.com/api/?name=Bone&background=f9a8d4&color=fff" }
+            { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" }
         ];
 
         // --- FUNÇÕES UTILITÁRIAS GLOBAIS ---
@@ -114,7 +113,6 @@
         const notifAudio = new Audio("https://assets.mixkit.co/active_storage/sfx/234/234-preview.mp3"); 
         notifAudio.volume = 0.6;
 
-        // Modificada para aceitar parâmetro de som explícito
         window.notify = (msg, type, playSound = false) => {
             if (playSound) {
                 notifAudio.currentTime = 0;
@@ -141,7 +139,7 @@
             currentUser = userDoc;
             localStorage.setItem('afk_user', JSON.stringify(currentUser));
             window.updateUI();
-            window.notify(`Olá, ${currentUser.name}!`, "success", false); // Sem som
+            window.notify(`Olá, ${currentUser.name}!`, "success", false);
             window.closeModal('modal-login');
         };
 
@@ -225,12 +223,10 @@
                 const userData = userSnap.data();
                 if (userData.password !== pass) return window.notify("Senha incorreta.", "error", false);
 
-                const isAdmin = ADMINS_LIST.includes(userData.name); // Legacy check replaced by granular later
                 const isAlly = userData.role === 'ally';
                 
                 await updateDoc(userRef, { lastLogin: Date.now() });
 
-                // Corrigido para garantir que role seja salvo corretamente no login
                 const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase());
                 const identityData = { nick: userData.name, createdAt: Date.now() };
                 if (isAlly) identityData.deviceId = "auth_v2";
@@ -238,6 +234,7 @@
                 
                 await setDoc(identityRef, identityData);
 
+                const isAdmin = ALL_ADMINS.includes(userData.name); 
                 window.loginSuccess({ ...userData, isAdmin, isAlly });
 
             } catch (e) {
@@ -302,7 +299,7 @@
 
                 window.notify("Conta criada com sucesso! Fazendo login...", "success", false);
                 
-                const isAdmin = ADMINS_LIST.includes(userData.name); // Legacy check
+                const isAdmin = ALL_ADMINS.includes(userData.name);
                 const isAlly = type === 'ally';
                 window.loginSuccess({ ...userData, isAdmin, isAlly });
 
@@ -374,7 +371,6 @@
 
             grid.innerHTML = '';
             
-            // Apenas Luhnny pode deletar membros
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
 
             combinedMembers.forEach(m => {
@@ -909,6 +905,7 @@
                     reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`;
                 });
             } else reqC?.classList.add('hidden');
+            // Removida chamada redundante de renderIdentities daqui
         };
 
         // --- RECRUTAMENTO ---
@@ -1083,17 +1080,19 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             
-            // Recrutamento Decisão - COM SOM
+            // Recrutamento Decisão - COM SOM (Apenas para o dono do formulário)
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { 
                 if (!initialRecruitmentListLoad) {
                     s.docChanges().forEach(change => {
                         if (change.type === "modified") {
                             const data = change.doc.data();
-                            const nick = data.nick || "Um jogador";
-                            if (data.status === 'aprovado') {
-                                window.notify(`🎉 ${nick} foi APROVADO no clã!`, "success", true);
-                            } else if (data.status === 'negado') {
-                                window.notify(`🚫 Candidatura de ${nick} foi negada.`, "error", true);
+                            // Verifica se o usuário logado é o dono da candidatura
+                            if (currentUser && data.nick && currentUser.name.toLowerCase() === data.nick.toLowerCase()) {
+                                if (data.status === 'aprovado') {
+                                    window.notify(`🎉 Parabéns! A tua candidatura foi APROVADA!`, "success", true);
+                                } else if (data.status === 'negado') {
+                                    window.notify(`🚫 A tua candidatura foi negada.`, "error", true);
+                                }
                             }
                         }
                     });
