@@ -1,2174 +1,2561 @@
 <!DOCTYPE html>
+
 <html lang="pt-pt">
+
 <head>
+
     <meta charset="UTF-8">
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Clã AFK | Minecraft</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
+
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
     <script src="https://unpkg.com/lucide@latest"></script>
+
     <style>
+
         body { font-family: 'Poppins', sans-serif; background-color: #fff1f2; scroll-behavior: smooth; }
+
         .pink-gradient { background: linear-gradient(135deg, #fbcfe8 0%, #f9a8d4 100%); }
+
         .card-shadow { box-shadow: 0 10px 25px -5px rgba(244, 114, 182, 0.1), 0 8px 10px -6px rgba(244, 114, 182, 0.1); }
+
         .tab-active { color: #db2777; border-bottom: 3px solid #db2777; }
+
         .login-tab-active { border-bottom: 2px solid #db2777; color: #db2777; font-weight: 700; }
+
         .hidden { display: none; }
+
         @keyframes subtle-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.9; } }
+
         @keyframes attention-pulse { 0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); transform: scale(1); } 50% { transform: scale(1.05); } 70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); transform: scale(1); } }
+
         @keyframes confetti-fall { 0% { transform: translateY(-100%) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(360deg); opacity: 0; } }
+
         .recruitment-badge { animation: subtle-pulse 3s infinite ease-in-out; }
+
         .btn-attention { animation: attention-pulse 2s infinite; }
+
         .modal-bg { background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+
     </style>
 
+
+
     <!-- Firebase SDK -->
+
     <script type="module">
+
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
         import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
+
+
         const firebaseConfig = {
+
             apiKey: "AIzaSyAhbf0kBYCAWsQAPKYx4TPdud1O_GUjoU4",
+
             authDomain: "clan-afk.firebaseapp.com",
+
             projectId: "clan-afk",
+
             storageBucket: "clan-afk.firebasestorage.app",
+
             messagingSenderId: "1047971218666",
+
             appId: "1:1047971218666:web:e28db1fa82c140b565c393"
+
         };
 
+
+
         const app = initializeApp(firebaseConfig);
+
         const auth = getAuth(app);
+
         const db = getFirestore(app);
+
         const appId = "clan-afk";
 
-        let currentUser = null;
-        let allEvents = [];
-        let allClanEvents = []; // Lista para eventos exclusivos do clã
-        let allAlliances = [];
-        let allAllianceRequests = [];
-        let allApplications = [];
-        let allIdentities = [];
-        let allMissions = [];
-        let allGiveaways = []; 
-        let hiddenStaticMembers = []; 
-        let memberDetailsOverrides = {}; // Armazena edições de membros (Aniv, Disp, Tags)
-        let isRecruitmentOpen = true; 
-        
-        // Flags para controlar notificações iniciais
-        let initialEventLoad = true;
-        let initialClanEventLoad = true;
-        let initialGiveawayLoad = true;
-        let initialRecruitmentLoad = true;
-        let initialRecruitmentListLoad = true; 
-        
-        let editingEventId = null;
-        let editingClanEventId = null; // ID para edição de evento do clã
-        let eventToDeleteId = null;
-        let clanEventToDeleteId = null; // ID para deletar evento do clã
-        let allianceToDeleteId = null;
-        let applicationToDeleteId = null;
-        let applicationToDeleteStatus = null; // Nova variável para controlar o status ao deletar
-        let missionToDeleteId = null;
-        let giveawayToDeleteId = null;
-        let memberToDelete = null; 
-        
-        let editingGiveawayId = null; // Variável para controlar edição de sorteio
-        let editingMemberNick = null; // Variável para controlar qual membro está sendo editado
 
-        // Variaveis para preservar o autor original ao editar
+
+        let currentUser = null;
+
+        let allEvents = [];
+
+        let allClanEvents = []; 
+
+        let allAlliances = [];
+
+        let allAllianceRequests = [];
+
+        let allApplications = [];
+
+        let allIdentities = [];
+
+        let allMissions = [];
+
+        let allGiveaways = []; 
+
+        let hiddenStaticMembers = []; 
+
+        let memberDetailsOverrides = {}; 
+
+        let isRecruitmentOpen = true; 
+
+        
+
+        let initialEventLoad = true;
+
+        let initialClanEventLoad = true;
+
+        let initialGiveawayLoad = true;
+
+        let initialRecruitmentLoad = true;
+
+        let initialRecruitmentListLoad = true; 
+
+        
+
+        let editingEventId = null;
+
+        let editingClanEventId = null; 
+
+        let eventToDeleteId = null;
+
+        let clanEventToDeleteId = null; 
+
+        let allianceToDeleteId = null;
+
+        let applicationToDeleteId = null;
+
+        let applicationToDeleteStatus = null; 
+
+        let missionToDeleteId = null;
+
+        let giveawayToDeleteId = null;
+
+        let memberToDelete = null; 
+
+        
+
+        let editingGiveawayId = null; 
+
+        let editingMemberNick = null; 
+
+
+
         let editingEventAuthor = null;
+
         let editingClanEventAuthor = null;
 
+
+
         // --- SISTEMA DE PERMISSÕES ---
-        const SUPER_ADMINS = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"]; // Acesso total
-        const EVENT_ADMINS = ["SrLordM", "Bone"]; // Apenas Eventos e Sorteios
+
+        const SUPER_ADMINS = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"]; 
+
+        const EVENT_ADMINS = ["SrLordM", "Bone"]; 
+
+        const MISSION_ADMINS = ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"]; 
+
         
-        // Lista combinada para verificações simples de "é algum tipo de admin"
+
         const ALL_ADMINS = [...SUPER_ADMINS, ...EVENT_ADMINS];
 
+
+
         const INVITE_CODE_MEMBER = "senhadificil"; 
+
         const INVITE_CODE_ALLY = "123alianca";
 
-        // SrLordM e Bone removidos daqui pois não são membros comuns
+
+
         const ALLOWED_MEMBERS = [
+
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
+
             "baiano019", "Raitzz_", "Invisivel", "NeverPuzzle", "chorapropai", 
+
             "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14", "zKingPrime", "PyromaniacVV"
+
         ];
 
-        // --- DADOS ESTÁTICOS DOS MEMBROS (Membros originais do clã) ---
+
+
         const STATIC_MEMBERS = [
+
             { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
+
             { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
+
             { nick: "Lagartuuuxaaa", role: "Co-Líder", tags: ["spvp", "cpvp"], aniv: "01/07", disp: "22h - 02h", img: "lagartuuuxaaa.png" },
+
             { nick: "iaruchy", tags: ["cpvp"], aniv: "18/04", disp: "Toda hora", img: "iaruchy.png" },
+
             { nick: "1gcy", tags: ["cpvp", "build"], aniv: "05/04", disp: "Toda hora", img: "1gcy.png" },
+
             { nick: "Pardas01", tags: ["cpvp", "builder", "farm"], aniv: "16/06", disp: "Tarde e Noite", img: "pardas01.png" },
+
             { nick: "baiano019", tags: ["builder"], aniv: "14/05", disp: "Noite", img: "baiano019.png" },
+
             { nick: "Raitzz_", tags: ["farm"], aniv: "22/03", disp: "Tarde e Manhã", img: "raitzz_.png" },
+
             { nick: "Invisivel", tags: ["spvp", "cpvp", "builder", "farm"], aniv: "28/07", disp: "Noite", img: "invisivel.png" },
+
             { nick: "NeverPuzzle", tags: ["spvp", "cpvp", "farm"], aniv: "11/08", disp: "Tarde", img: "neverpuzzle.png" },
+
             { nick: "chorapropai", tags: ["cpvp", "farm"], aniv: "10/01", disp: "Variável", img: "chorapropai.png" },
+
             { nick: "felpipoca", tags: ["spvp", "farm"], aniv: "21/01", disp: "Dia e Madrugada", img: "felpipoca.png" },
+
             { nick: "1aswd", tags: ["spvp", "cpvp", "builder"], aniv: "19/09", disp: "Dia todo", img: "1aswd.png" },
+
             { nick: "ynSunn", tags: ["spvp", "builder", "farm"], aniv: "23/08", disp: "Tarde e Noite", img: "ynsunn.png" },
+
             { nick: "labubusista", tags: ["spvp", "cpvp", "builder"], aniv: "17/02", disp: "Quase sempre", img: "labubusista.png" },
+
             { nick: "TheP1nk", tags: ["pvp", "cpvp", "builder"], aniv: "10/07", disp: "Tarde e Noite", img: "thep1nk.png" },
+
             { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
+
             { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" },
+
             { nick: "zKingPrime", tags: ["spvp", "cpvp"], aniv: "09/10", disp: "Toda hora", img: "zkingprime.png" },
+
             { nick: "PyromaniacVV", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "pyromaniacvv.png" }
+
         ];
 
-        // --- FUNÇÕES UTILITÁRIAS GLOBAIS ---
 
-        // Som de notificação (Xilofone Fofo)
+
         const notifAudio = new Audio("https://assets.mixkit.co/active_storage/sfx/234/234-preview.mp3"); 
+
         notifAudio.volume = 0.6;
 
+
+
         window.notify = (msg, type, playSound = false) => {
+
             if (playSound) {
+
                 notifAudio.currentTime = 0;
+
                 notifAudio.play().catch(e => console.log("Áudio bloqueado."));
+
             }
 
             const t = document.getElementById('toast');
+
             if (!t) return;
+
             t.innerText = msg;
+
             t.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl text-white font-bold shadow-2xl transition-all z-[1500] ${type === 'error' ? 'bg-red-500' : type === 'success' ? 'bg-green-500' : 'bg-pink-500'}`;
+
             t.style.display = 'block'; 
+
             setTimeout(() => { if(t) t.style.display = 'none'; }, 4000);
+
         };
+
+
 
         window.openModal = (id) => { 
+
             document.getElementById(id)?.classList.remove('hidden'); 
+
             if(id === 'modal-login') {
+
                 setTimeout(() => document.getElementById('login-user')?.focus(), 100);
+
             }
+
         };
+
         window.closeModal = (id) => { document.getElementById(id)?.classList.add('hidden'); };
 
+
+
         window.loginSuccess = (userDoc) => {
+
             currentUser = userDoc;
+
             localStorage.setItem('afk_user', JSON.stringify(currentUser));
+
             window.updateUI();
+
             window.notify(`Olá, ${currentUser.name}!`, "success", false);
+
             window.closeModal('modal-login');
+
         };
 
-        // --- SISTEMA DE NAVEGAÇÃO POR TECLADO ---
+
+
         window.handleKeyNav = (event, nextId, prevId, action) => {
+
             const isVisible = (id) => {
+
                 const el = document.getElementById(id);
+
                 return el && el.offsetParent !== null;
+
             };
+
             let targetId = null;
 
             if (event.key === "ArrowDown") {
+
                 event.preventDefault();
+
                 targetId = nextId;
+
                 if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) targetId = 'reg-invite';
+
                 document.getElementById(targetId)?.focus();
+
             } else if (event.key === "ArrowUp") {
+
                 event.preventDefault();
+
                 targetId = prevId;
+
                 if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) targetId = 'reg-type';
+
                 document.getElementById(targetId)?.focus();
+
             } else if (event.key === "Enter") {
+
                 event.preventDefault();
+
                 if (action) action(); 
+
                 else if (nextId) {
+
                     targetId = nextId;
+
                     if (targetId === 'reg-clan' && !isVisible('reg-clan-div')) targetId = 'reg-invite';
+
                     document.getElementById(targetId)?.focus();
+
                 }
+
             }
+
         };
 
-        // --- SISTEMA DE AUTENTICAÇÃO ---
+
 
         window.toggleAuthMode = (mode) => {
+
             const loginForm = document.getElementById('auth-login-form');
+
             const registerForm = document.getElementById('auth-register-form');
+
             const tabLogin = document.getElementById('tab-mode-login');
+
             const tabRegister = document.getElementById('tab-mode-register');
 
             if (mode === 'login') {
+
                 loginForm.classList.remove('hidden');
+
                 registerForm.classList.add('hidden');
+
                 tabLogin.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
+
                 tabLogin.classList.remove('text-slate-400');
+
                 tabRegister.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
+
                 tabRegister.classList.add('text-slate-400');
+
                 setTimeout(() => document.getElementById('login-user')?.focus(), 50);
+
             } else {
+
                 loginForm.classList.add('hidden');
+
                 registerForm.classList.remove('hidden');
+
                 tabRegister.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
+
                 tabRegister.classList.remove('text-slate-400');
+
                 tabLogin.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
+
                 tabLogin.classList.add('text-slate-400');
+
                 window.populateAllySelectRegister();
+
                 setTimeout(() => document.getElementById('reg-nick')?.focus(), 50);
+
             }
+
         };
+
+
 
         window.toggleRegisterType = () => {
+
             const type = document.getElementById('reg-type').value;
+
             const clanDiv = document.getElementById('reg-clan-div');
-            
+
             if (type === 'ally') clanDiv.classList.remove('hidden');
+
             else clanDiv.classList.add('hidden');
+
         };
 
+
+
         window.handleLogin = async () => {
+
             const nick = document.getElementById('login-user').value.trim();
+
             const pass = document.getElementById('login-pass').value;
 
             if (!nick || !pass) return window.notify("Preencha todos os campos.", "error", false);
 
             try {
+
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nick.toLowerCase());
+
                 const userSnap = await getDoc(userRef);
 
                 if (!userSnap.exists()) return window.notify("Usuário não encontrado. Crie uma conta.", "error", false);
 
                 const userData = userSnap.data();
+
                 if (userData.password !== pass) return window.notify("Senha incorreta.", "error", false);
 
                 const isAlly = userData.role === 'ally';
-                
+
                 await updateDoc(userRef, { lastLogin: Date.now() });
 
                 const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase());
+
                 const identityData = { nick: userData.name, createdAt: Date.now() };
+
                 if (isAlly) identityData.deviceId = "auth_v2";
+
                 else identityData.role = "member";
-                
+
                 await setDoc(identityRef, identityData);
 
                 const isAdmin = ALL_ADMINS.includes(userData.name); 
+
                 window.loginSuccess({ ...userData, isAdmin, isAlly });
 
             } catch (e) {
+
                 console.error(e);
+
                 window.notify("Erro ao fazer login.", "error", false);
+
             }
+
         };
 
+
+
         window.handleRegister = async () => {
+
             const nick = document.getElementById('reg-nick').value.trim();
+
             const pass = document.getElementById('reg-pass').value;
+
             const type = document.getElementById('reg-type').value; 
+
             const clan = document.getElementById('reg-clan').value;
+
             const inviteCode = document.getElementById('reg-invite').value;
 
             if (!nick || !pass || !inviteCode) return window.notify("Preencha todos os campos.", "error", false);
+
             if (type === 'ally' && !clan) return window.notify("Selecione um clã.", "error", false);
 
             if (type === 'member' && inviteCode !== INVITE_CODE_MEMBER) return window.notify("Código de Membro incorreto.", "error", false);
+
             if (type === 'ally' && inviteCode !== INVITE_CODE_ALLY) return window.notify("Código de Aliado incorreto.", "error", false);
 
             let finalName = nick;
 
             if (type === 'member') {
+
                 const staticMatch = ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase());
+
                 const recruitMatch = allApplications.find(app => app.nick.toLowerCase() === nick.toLowerCase() && app.status === 'aprovado');
-                
+
                 if (!staticMatch && !recruitMatch) {
+
                     return window.notify("Este Nick não está na lista de membros permitidos e não possui aprovação recente.", "error", false);
+
                 }
-                
+
                 finalName = staticMatch || (recruitMatch ? recruitMatch.nick : nick);
+
             }
 
             try {
+
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', finalName.toLowerCase());
+
                 const userSnap = await getDoc(userRef);
 
                 if (userSnap.exists()) return window.notify("Este usuário já está registrado. Faça login.", "error", false);
 
                 const userData = {
+
                     name: finalName, 
+
                     password: pass,
+
                     role: type,
+
                     clan: type === 'ally' ? clan : 'AFK',
+
                     createdAt: Date.now()
+
                 };
 
                 await setDoc(userRef, userData);
 
                 if (type === 'ally') {
+
                     let docAlly = allAlliances.find(a => a.name === clan);
+
                     if (docAlly) {
+
                         if (!(docAlly.members || []).includes(finalName)) {
+
                             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', docAlly.id), { members: [...(docAlly.members || []), finalName] });
+
                         }
+
                     } else {
+
                         const tag = clan.substring(0, 4).toUpperCase();
+
                         await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: clan, tag, members: [finalName], createdAt: Date.now() });
+
                     }
+
                 }
 
                 window.notify("Conta criada com sucesso! Fazendo login...", "success", false);
-                
+
                 const isAdmin = ALL_ADMINS.includes(userData.name);
+
                 const isAlly = type === 'ally';
+
                 window.loginSuccess({ ...userData, isAdmin, isAlly });
 
             } catch (e) {
+
                 console.error(e);
+
                 window.notify("Erro ao registrar.", "error", false);
+
             }
+
         };
 
-        // --- INTERFACE E NAVEGAÇÃO ---
+
 
         window.switchTab = (tab) => {
+
             ['apresentacao', 'membros', 'eventos', 'clan-events', 'aliancas', 'recrutamento', 'contas', 'missoes', 'sorteios'].forEach(t => {
+
                 const el = document.getElementById('tab-' + t);
+
                 const btn = document.getElementById('btn-' + t);
+
                 if (!el || !btn) return;
+
                 if (t === tab) { el.classList.remove('hidden'); btn.classList.add('tab-active'); btn.classList.remove('text-pink-300'); } 
+
                 else { el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('text-pink-300'); }
+
             });
+
             lucide.createIcons();
+
         };
 
-        // --- SISTEMA DE MEMBROS AUTOMÁTICO ---
+
+
         window.renderMembers = () => {
+
             const grid = document.getElementById('members-grid'); 
+
             const countEl = document.getElementById('members-count');
+
             if(!grid) return;
-            
-            // Helper para mesclar dados com overrides
+
             const getMemberData = (baseData) => {
+
                 const override = memberDetailsOverrides[baseData.nick.toLowerCase()];
+
                 if (override) {
+
                     return {
+
                         ...baseData,
+
                         aniv: override.aniv || baseData.aniv,
+
                         disp: override.disp || baseData.disp,
+
                         tags: override.tags ? override.tags : baseData.tags
+
                     };
+
                 }
+
                 return baseData;
+
             };
 
             const approvedMembers = allApplications
+
                 .filter(app => app.status === 'aprovado')
+
                 .map(app => {
+
                     const tags = [];
+
                     const combat = (app.combate || '').toLowerCase();
+
                     if(combat.includes('cpvp') || combat.includes('ambos')) tags.push('cpvp');
+
                     if(combat.includes('spvp') || combat.includes('ambos')) tags.push('spvp');
+
                     if(combat.includes('pvp')) tags.push('pvp');
-                    
+
                     const build = (app.build || '').toLowerCase();
+
                     if(build.includes('sou bom') || build.includes('básico')) tags.push('builder');
-                    
+
                     const farm = (app.farm || '').toLowerCase();
+
                     if(farm.includes('sou bom') || farm.includes('básico')) tags.push('farm');
 
                     if(tags.length === 0) tags.push('membro');
 
                     return getMemberData({
+
                         id: app.id, 
+
                         nick: app.nick,
+
                         role: null,
+
                         tags: tags,
+
                         aniv: app.aniversario || 'N/I',
+
                         disp: app.horarios || app.tempo + 'h',
+
                         img: `https://ui-avatars.com/api/?name=${app.nick}&background=f9a8d4&color=fff`,
+
                         isStatic: false
+
                     });
+
                 });
 
             const visibleStaticMembers = STATIC_MEMBERS
+
                 .filter(m => !hiddenStaticMembers.includes(m.nick))
+
                 .map(m => getMemberData({...m, isStatic: true}));
-            
+
             const combinedMembers = [...visibleStaticMembers];
-            
+
             approvedMembers.forEach(newM => {
+
                 if (!combinedMembers.some(m => m.nick.toLowerCase() === newM.nick.toLowerCase())) {
+
                     combinedMembers.push(newM);
+
                 }
+
             });
 
             if(countEl) countEl.innerText = `Total: ${combinedMembers.length} membros registrados`;
 
             grid.innerHTML = '';
-            
+
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
 
             combinedMembers.forEach(m => {
+
                 let tagsHtml = '';
+
                 if(m.role) tagsHtml += `<span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">${m.role}</span>`;
-                
+
                 (m.tags || []).forEach(t => {
+
                     let color = 'bg-slate-100 text-slate-600';
+
                     const tl = t.toLowerCase();
+
                     if (tl === 'cpvp') color = 'bg-red-100 text-red-600';
+
                     if (tl === 'spvp') color = 'bg-blue-100 text-blue-600';
+
                     if (tl === 'builder' || tl === 'build' || tl === 'construção') color = 'bg-yellow-100 text-yellow-600';
+
                     if (tl === 'farm') color = 'bg-green-100 text-green-600';
+
                     if (tl === 'pvp') color = 'bg-purple-100 text-purple-600';
+
                     if (tl === 'eventos') color = 'bg-purple-100 text-purple-600';
+
                     if (tl === 'membro') color = 'bg-slate-200 text-slate-500';
-                    
+
                     tagsHtml += `<span class="px-2 py-1 ${color} text-[10px] uppercase rounded-full font-bold">${t}</span>`;
+
                 });
 
                 let adminBtns = '';
+
                 if (isLuhnny) {
+
                     adminBtns = `
+
                         <div class="absolute top-4 right-4 flex gap-1 z-10">
+
                             <button onclick='window.openEditMemberModal(${JSON.stringify(m)})' class="p-1.5 bg-white text-blue-400 hover:text-blue-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+
                             <button onclick='window.requestDeleteMember(${JSON.stringify(m)})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+
                         </div>
+
                     `;
+
                 }
 
                 const card = `
+
                 <div class="relative bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">
+
                     ${adminBtns}
+
                     <div class="flex justify-between items-start mb-4">
+
                         <h3 class="text-xl font-bold ${m.role === 'Líder' ? 'text-pink-600' : 'text-pink-500'} flex items-center gap-2">
+
                             ${m.nick} ${m.role === 'Líder' ? '<i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>' : ''}
+
                         </h3>
+
                         <img src="${m.img}" onerror="this.src='https://ui-avatars.com/api/?name=${m.nick}&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100">
+
                     </div>
+
                     <div class="space-y-3 mb-6 flex-grow text-sm">
+
                         <div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: ${m.aniv}</div>
+
                         <div class="flex items-center gap-3 font-medium text-slate-600">Disponível: ${m.disp}</div>
+
                     </div>
+
                     <div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">
+
                         ${tagsHtml}
+
                     </div>
+
                 </div>`;
-                
+
                 grid.innerHTML += card;
+
             });
+
             lucide.createIcons();
+
         };
 
-        // --- SISTEMA DE EDIÇÃO DE MEMBROS (LUHNNY) ---
+
+
         window.openEditMemberModal = (member) => {
+
             editingMemberNick = member.nick;
+
             document.getElementById('edit-mem-nick').innerText = member.nick;
+
             document.getElementById('edit-mem-aniv').value = member.aniv;
+
             document.getElementById('edit-mem-disp').value = member.disp;
-            // Converte array de tags para string separada por virgula
+
             document.getElementById('edit-mem-tags').value = (member.tags || []).join(', ');
-            
+
             window.openModal('modal-edit-member');
+
         };
+
+
 
         window.saveMemberEdit = async () => {
+
             if (!editingMemberNick) return;
 
             const aniv = document.getElementById('edit-mem-aniv').value.trim();
+
             const disp = document.getElementById('edit-mem-disp').value.trim();
+
             const tagsStr = document.getElementById('edit-mem-tags').value.trim();
-            
-            // Processa as tags: remove espaços extras e cria array
+
             const tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
 
-            const updateData = {
-                aniv,
-                disp,
-                tags
-            };
+            const updateData = { aniv, disp, tags };
 
             try {
-                // Salva na coleção de detalhes auxiliares (usando nick lowercase como ID)
+
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'member_details', editingMemberNick.toLowerCase()), updateData);
+
                 window.notify(`Dados de ${editingMemberNick} atualizados!`, "success", false);
+
                 window.closeModal('modal-edit-member');
+
             } catch (e) {
+
                 console.error(e);
+
                 window.notify("Erro ao salvar alterações.", "error", false);
+
             }
+
         };
 
-        // --- LÓGICA DE EXCLUSÃO DE MEMBROS ---
+
+
         window.requestDeleteMember = (member) => {
+
             memberToDelete = member;
+
             window.openModal('modal-confirm-member-delete');
+
         };
+
+
 
         window.confirmMemberDelete = async () => {
+
             if (!memberToDelete) return;
-            
+
             try {
+
                 if (memberToDelete.isStatic) {
+
                     const settingsRef = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members');
+
                     const snap = await getDoc(settingsRef);
+
                     let currentList = [];
+
                     if (snap.exists()) currentList = snap.data().nicks || [];
-                    
+
                     if (!currentList.includes(memberToDelete.nick)) {
+
                         await setDoc(settingsRef, { nicks: [...currentList, memberToDelete.nick] });
+
                     }
+
                 } else {
-                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', memberToDelete.id), {
-                        status: 'removed'
-                    });
+
+                    await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', memberToDelete.id), { status: 'removed' });
+
                 }
+
                 window.notify(`Membro ${memberToDelete.nick} removido.`, "success", false);
+
             } catch (e) {
+
                 console.error(e);
+
                 window.notify("Erro ao remover membro.", "error", false);
+
             }
+
             window.closeModal('modal-confirm-member-delete');
+
             memberToDelete = null;
+
         };
 
-        // --- SISTEMA DE MISSÕES ---
+
+
+        // --- SISTEMA DE MISSÕES ATUALIZADO ---
+
         window.createMission = async () => {
+
             const objective = document.getElementById('mis-objective').value.trim();
+
             const reward = document.getElementById('mis-reward').value.trim();
-            if (!objective || !reward) return window.notify("Preencha todos os campos da missão.", "error", false);
+
+            const tag = document.getElementById('mis-tag').value;
+
+            
+
+            if (!objective || !reward || !tag) return window.notify("Preencha todos os campos da missão.", "error", false);
+
+
 
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), {
+
                 objective,
+
                 reward,
+
+                tag,
+
                 status: 'open',
+
                 takenBy: null,
+
+                createdBy: currentUser.name,
+
                 createdAt: Date.now()
+
             });
+
             window.notify("Missão criada!", "success", false);
+
             window.closeModal('modal-create-mission');
+
             document.getElementById('form-create-mission').reset();
+
         };
+
+
 
         window.takeMission = async (id) => {
+
             if (!currentUser) return;
+
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', id), {
+
                 status: 'taken',
+
                 takenBy: currentUser.name
+
             });
+
             window.notify("Você aceitou a missão!", "success", false);
+
         };
+
+
 
         window.requestDeleteMission = (id) => {
+
             missionToDeleteId = id;
+
             window.openModal('modal-confirm-mission-delete');
+
         };
+
+
 
         window.confirmMissionDelete = async () => {
+
             if (missionToDeleteId) {
+
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', missionToDeleteId));
+
                 window.notify("Missão removida/concluída.", "success", false);
+
                 window.closeModal('modal-confirm-mission-delete');
+
             }
+
         };
+
+
 
         window.renderMissions = function() {
+
             const list = document.getElementById('missions-list'); if(!list) return;
+
             list.innerHTML = '';
+
             
+
             if (allMissions.length === 0) {
+
                 list.innerHTML = '<div class="col-span-full text-center p-8 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400">Nenhuma missão disponível no momento.</div>';
+
                 return;
+
             }
+
+
 
             allMissions.sort((a,b) => b.createdAt - a.createdAt).forEach(m => {
+
                 const isTaken = m.status === 'taken';
-                // Permissão de ADMINS (SUPER_ADMINS)
-                const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
+
+                const canManage = currentUser && MISSION_ADMINS.includes(currentUser.name);
+
                 
+
                 let buttonHtml = '';
-                if (isSuperAdmin) {
+
+                if (canManage) {
+
                     buttonHtml = `<button onclick="window.requestDeleteMission('${m.id}')" class="w-full mt-4 py-2 rounded-xl border-2 border-red-100 text-red-400 font-bold hover:bg-red-50 transition uppercase text-xs">Concluir / Excluir</button>`;
+
                 } else if (!isTaken) {
+
                     buttonHtml = `<button onclick="window.takeMission('${m.id}')" class="w-full mt-4 py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl">Aceitar Missão</button>`;
+
                 }
 
+
+
                 let statusBadge = isTaken 
+
                     ? `<span class="bg-yellow-100 text-yellow-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase flex items-center gap-1"><i data-lucide="user"></i> ${m.takenBy}</span>`
+
                     : `<span class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase">Disponível</span>`;
 
+
+
+                // Cores das tags
+
+                let tagColor = "bg-slate-100 text-slate-500";
+
+                if(m.tag === 'Farm') tagColor = "bg-green-500 text-white";
+
+                if(m.tag === 'Build') tagColor = "bg-amber-500 text-white";
+
+                if(m.tag === 'Recursos') tagColor = "bg-blue-500 text-white";
+
+                if(m.tag === 'Exploração') tagColor = "bg-purple-500 text-white";
+
+
+
                 list.innerHTML += `
-                <div class="bg-white p-6 rounded-3xl card-shadow border-2 ${isTaken ? 'border-yellow-100 opacity-90' : 'border-pink-200'} transition hover:scale-[1.01]">
+
+                <div class="bg-white p-6 rounded-3xl card-shadow border-2 ${isTaken ? 'border-yellow-100 opacity-90' : 'border-pink-200'} transition hover:scale-[1.01] flex flex-col">
+
                     <div class="flex justify-between items-start mb-4">
-                        <div class="p-3 bg-pink-50 rounded-2xl text-pink-500"><i data-lucide="scroll" class="w-6 h-6"></i></div>
+
+                        <div class="flex flex-col gap-2">
+
+                             <span class="px-3 py-1 rounded-lg text-[10px] font-bold uppercase w-fit ${tagColor}">${m.tag || 'Missão'}</span>
+
+                             <div class="p-3 bg-pink-50 rounded-2xl text-pink-500 w-fit"><i data-lucide="scroll" class="w-6 h-6"></i></div>
+
+                        </div>
+
                         ${statusBadge}
+
                     </div>
+
                     <h4 class="text-lg font-bold text-slate-700 mb-2 leading-tight">${m.objective}</h4>
-                    <p class="text-sm text-pink-500 font-semibold flex items-center gap-2 bg-pink-50/50 p-2 rounded-lg border border-pink-50"><i data-lucide="gift" class="w-4 h-4"></i> Recompensa: ${m.reward}</p>
+
+                    <p class="text-sm text-pink-500 font-semibold flex items-center gap-2 bg-pink-50/50 p-2 rounded-lg border border-pink-50 mb-4"><i data-lucide="gift" class="w-4 h-4"></i> Recompensa: ${m.reward}</p>
+
+                    
+
+                    <div class="mt-auto pt-4 border-t border-slate-50 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+
+                        Criada por: <span class="text-pink-400">${m.createdBy || 'Luhnny'}</span>
+
+                    </div>
+
+
+
                     ${buttonHtml}
+
                 </div>`;
+
             });
+
             lucide.createIcons();
+
         };
 
-        // --- SISTEMA DE SORTEIOS ---
-        
-        // Função unificada para Salvar (Criar ou Editar)
+
+
         window.saveGiveaway = async () => {
+
             const prize = document.getElementById('giv-prize').value.trim();
+
             const date = document.getElementById('giv-date').value;
+
             const time = document.getElementById('giv-time').value;
-            
+
             if (!prize || !date || !time) return window.notify("Preencha todos os campos do sorteio.", "error", false);
 
-            const data = {
-                prize,
-                date,
-                time
-            };
+            const data = { prize, date, time };
 
             if (editingGiveawayId) {
-                // Modo Edição
+
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', editingGiveawayId), data);
+
                 window.notify("Sorteio Atualizado!", "success", false);
+
             } else {
-                // Modo Criação
+
                 await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), {
+
                     ...data,
+
                     participants: [],
+
                     winner: null,
+
                     status: 'open',
+
                     createdBy: currentUser.name,
+
                     createdAt: Date.now()
+
                 });
+
                 window.notify("Sorteio Criado!", "success", false);
+
             }
-            
+
             window.closeModal('modal-create-giveaway');
+
             document.getElementById('form-create-giveaway').reset();
+
             editingGiveawayId = null;
+
         };
+
+
 
         window.openCreateGiveawayModal = () => {
+
             editingGiveawayId = null;
+
             document.getElementById('form-create-giveaway').reset();
+
             document.getElementById('modal-title-giveaway').innerText = "Novo Sorteio";
+
             window.openModal('modal-create-giveaway');
+
         };
+
+
 
         window.editGiveaway = (id) => {
+
             const g = allGiveaways.find(x => x.id === id);
+
             if (!g) return;
-            
+
             editingGiveawayId = id;
+
             document.getElementById('giv-prize').value = g.prize;
+
             document.getElementById('giv-date').value = g.date;
+
             document.getElementById('giv-time').value = g.time;
+
             document.getElementById('modal-title-giveaway').innerText = "Editar Sorteio";
+
             window.openModal('modal-create-giveaway');
+
         };
+
+
 
         window.viewParticipants = (id) => {
+
             const g = allGiveaways.find(x => x.id === id);
+
             const listContainer = document.getElementById('participants-list-content');
+
             const totalEl = document.getElementById('participants-total-count');
-            
+
             listContainer.innerHTML = '';
-            
+
             if (g && g.participants && g.participants.length > 0) {
+
                 totalEl.innerText = `${g.participants.length} Participantes`;
+
                 g.participants.forEach(p => {
+
                     listContainer.innerHTML += `
+
                         <div class="flex items-center gap-3 p-3 bg-pink-50 rounded-xl border border-pink-100">
+
                             <img src="https://ui-avatars.com/api/?name=${p}&background=fbcfe8&color=db2777" class="w-8 h-8 rounded-full">
+
                             <span class="font-bold text-slate-700">${p}</span>
+
                         </div>`;
+
                 });
+
             } else {
+
                 totalEl.innerText = "0 Participantes";
+
                 listContainer.innerHTML = '<div class="col-span-full text-center text-slate-400 italic py-4">Ninguém participando ainda.</div>';
+
             }
+
             window.openModal('modal-view-participants');
+
         };
 
+
+
         window.joinGiveaway = async (id) => {
+
             if (!currentUser) return;
+
             const giv = allGiveaways.find(g => g.id === id);
+
             if (!giv) return;
-            
+
             const currentParts = giv.participants || [];
+
             if (currentParts.includes(currentUser.name)) return window.notify("Você já está participando!", "info", false);
 
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
+
                 participants: [...currentParts, currentUser.name]
+
             });
+
             window.notify("Participação confirmada!", "success", false);
+
         };
+
+
 
         window.runGiveawayDraw = async (id) => {
+
             const giv = allGiveaways.find(g => g.id === id);
+
             if (!giv) return;
 
-            // Permissão: Luhnny ou o Criador do sorteio
             const isAuthorized = currentUser && (currentUser.name === "Luhnny" || currentUser.name === giv.createdBy);
+
             if (!isAuthorized) return window.notify("Apenas a Luhnny ou o criador podem realizar o sorteio.", "error", false);
-            
+
             if (!giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error", false);
 
-            // Algoritmo de sorteio criptograficamente seguro para garantir imparcialidade total
             const randomBuffer = new Uint32Array(1);
+
             window.crypto.getRandomValues(randomBuffer);
+
             const winnerIndex = randomBuffer[0] % giv.participants.length;
+
             const winner = giv.participants[winnerIndex];
 
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
-                winner: winner,
-                status: 'closed'
-            });
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), { winner: winner, status: 'closed' });
+
         };
 
-        window.requestDeleteGiveaway = (id) => {
-            giveawayToDeleteId = id;
-            window.openModal('modal-confirm-giveaway-delete');
-        };
+
+
+        window.requestDeleteGiveaway = (id) => { giveawayToDeleteId = id; window.openModal('modal-confirm-giveaway-delete'); };
 
         window.confirmGiveawayDelete = async () => {
+
             if (giveawayToDeleteId) {
+
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', giveawayToDeleteId));
+
                 window.closeModal('modal-confirm-giveaway-delete');
+
                 window.notify("Sorteio removido.", "success", false);
+
             }
+
         };
 
+
+
         window.renderGiveaways = function() {
+
             const list = document.getElementById('giveaways-list'); if(!list) return;
+
             list.innerHTML = '';
 
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
+
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
 
             if (allGiveaways.length === 0) {
+
                 list.innerHTML = '<div class="col-span-full text-center p-12 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400 font-medium">Nenhum sorteio ativo no momento. Fique atento!</div>';
+
                 return;
+
             }
 
             allGiveaways.sort((a,b) => (a.status === 'open' ? -1 : 1) || b.createdAt - a.createdAt).forEach(g => {
+
                 const isParticipant = currentUser && (g.participants || []).includes(currentUser.name);
+
                 const hasWinner = g.winner !== null;
+
                 const pCount = (g.participants || []).length;
+
                 const isCreator = currentUser && (g.createdBy === currentUser.name || isLuhnny);
 
                 let actionArea = '';
 
                 if (hasWinner) {
-                    actionArea = `
-                        <div class="mt-6 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-200 text-center">
-                            <p class="text-xs font-bold text-yellow-600 uppercase mb-1">O jogador que ganhou é:</p>
-                            <p class="text-2xl font-extrabold text-slate-800 flex justify-center items-center gap-2">
-                                <i data-lucide="trophy" class="w-6 h-6 text-yellow-500"></i> ${g.winner}
-                            </p>
-                        </div>
-                    `;
-                } else {
-                    let joinBtn = '';
-                    if (currentUser && !isParticipant) {
-                        joinBtn = `<button onclick="window.joinGiveaway('${g.id}')" class="w-full py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>`;
-                    } else if (currentUser && isParticipant) {
-                        joinBtn = `<div class="w-full py-3 rounded-xl bg-green-50 text-green-600 font-bold border border-green-200 text-center flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> Você está participando</div>`;
-                    } else if (!currentUser) {
-                        joinBtn = `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
-                    }
 
-                    let drawBtn = '';
-                    // Botão para sortear visível para Luhnny ou o Criador
-                    if (isCreator && pCount > 0) {
-                        drawBtn = `
-                        <div class="mt-3 flex gap-2">
-                            <button onclick="window.runGiveawayDraw('${g.id}')" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button>
-                            <button onclick="window.viewParticipants('${g.id}')" class="px-4 py-3 rounded-xl bg-pink-100 text-pink-600 font-bold shadow-sm hover:bg-pink-200 transition"><i data-lucide="eye"></i></button>
-                        </div>`;
-                    } else if (isCreator && pCount === 0) {
-                        drawBtn = `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>`;
-                    } else if (isEventAdmin) {
-                         drawBtn = `<button onclick="window.viewParticipants('${g.id}')" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>`;
-                    }
+                    actionArea = `<div class="mt-6 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-200 text-center"><p class="text-xs font-bold text-yellow-600 uppercase mb-1">O jogador que ganhou é:</p><p class="text-2xl font-extrabold text-slate-800 flex justify-center items-center gap-2"><i data-lucide="trophy" class="w-6 h-6 text-yellow-500"></i> ${g.winner}</p></div>`;
+
+                } else {
+
+                    let joinBtn = currentUser && !isParticipant ? `<button onclick="window.joinGiveaway('${g.id}')" class="w-full py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>` : currentUser && isParticipant ? `<div class="w-full py-3 rounded-xl bg-green-50 text-green-600 font-bold border border-green-200 text-center flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> Você está participando</div>` : `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
+
+                    let drawBtn = isCreator && pCount > 0 ? `<div class="mt-3 flex gap-2"><button onclick="window.runGiveawayDraw('${g.id}')" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button><button onclick="window.viewParticipants('${g.id}')" class="px-4 py-3 rounded-xl bg-pink-100 text-pink-600 font-bold shadow-sm hover:bg-pink-200 transition"><i data-lucide="eye"></i></button></div>` : isCreator && pCount === 0 ? `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>` : isEventAdmin ? `<button onclick="window.viewParticipants('${g.id}')" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>` : '';
 
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
+
                 }
 
-                // Botões de administração (Deletar e Editar) - Disponíveis para Admins ou o Criador
-                let adminControls = '';
-                if (isEventAdmin || isCreator) {
-                    adminControls = `
-                    <div class="absolute top-4 right-4 flex gap-2">
-                        <button onclick="window.editGiveaway('${g.id}')" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
-                        <button onclick="window.requestDeleteGiveaway('${g.id}')" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                    </div>`;
-                }
+                let adminControls = isEventAdmin || isCreator ? `<div class="absolute top-4 right-4 flex gap-2"><button onclick="window.editGiveaway('${g.id}')" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="window.requestDeleteGiveaway('${g.id}')" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>` : '';
 
-                list.innerHTML += `
-                    <div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">
-                        ${adminControls}
-                        <div>
-                            <div class="flex items-center gap-2 mb-2 text-pink-500 font-bold text-xs uppercase tracking-wider">
-                                <i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}
-                            </div>
-                            <h3 class="text-2xl font-extrabold text-slate-800 mb-1">${g.prize}</h3>
-                            <p class="text-sm text-slate-500 font-medium">Sorteio organizado por ${g.createdBy}</p>
-                            
-                            <div class="mt-4 flex items-center gap-2 text-sm text-slate-600 font-semibold bg-slate-50 p-2 rounded-lg inline-block">
-                                <i data-lucide="users" class="w-4 h-4 text-pink-400"></i> ${pCount} Participantes
-                            </div>
-                        </div>
-                        ${actionArea}
-                    </div>
-                `;
+                list.innerHTML += `<div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">${adminControls}<div><div class="flex items-center gap-2 mb-2 text-pink-500 font-bold text-xs uppercase tracking-wider"><i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}</div><h3 class="text-2xl font-extrabold text-slate-800 mb-1">${g.prize}</h3><p class="text-sm text-slate-500 font-medium">Sorteio organizado por ${g.createdBy}</p><div class="mt-4 flex items-center gap-2 text-sm text-slate-600 font-semibold bg-slate-50 p-2 rounded-lg inline-block"><i data-lucide="users" class="w-4 h-4 text-pink-400"></i> ${pCount} Participantes</div></div>${actionArea}</div>`;
+
             });
+
             lucide.createIcons();
+
         };
 
 
-        // --- GESTÃO DE EVENTOS ---
+
         window.createEventCard = function(ev, type) {
+
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
+
             let controls = '';
+
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
+
             const pCount = (ev.participants || []).length;
-            
+
             const creditText = (ev.suggestedBy && !ALL_ADMINS.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
+
             const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
-            
+
             if (isEventAdmin) {
-                // Adicionado botão Editar nas sugestões
+
                 if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
+
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
+
             } else if (currentUser && !currentUser.isAlly && (type === 'active' || type === 'history')) {
+
                 controls = pList;
+
             }
 
-            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]">
-                <div class="flex justify-between items-start mb-1">
-                    <h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3>
-                    <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span>
-                </div>
-                ${creditText}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4">
-                    <div class="space-y-2">
-                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p>
-                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p>
-                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p>
-                    </div>
-                    <div class="space-y-2">
-                        ${prizeDisplay}
-                        <div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div>
-                    </div>
-                </div>
-                <div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>
-                ${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}
-                ${controls}
-            </div>`;
+            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
+
         };
 
-        window.renderEvents = function() {
-            const actC = document.getElementById('active-events-list'); 
-            const histC = document.getElementById('history-events-list'); 
-            const suggC = document.getElementById('suggested-events-list');
-            const suggS = document.getElementById('suggestions-section');
-            if(!actC) return;
-            actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
 
-            const actives = allEvents.filter(e => e.status === 'active');
-            const history = allEvents.filter(e => e.status === 'ended');
-            const suggestions = allEvents.filter(e => e.status === 'suggestion');
+
+        window.renderEvents = function() {
+
+            const actC = document.getElementById('active-events-list'); const histC = document.getElementById('history-events-list'); const suggC = document.getElementById('suggested-events-list'); const suggS = document.getElementById('suggestions-section');
+
+            if(!actC) return; actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
+
+            const actives = allEvents.filter(e => e.status === 'active'); const history = allEvents.filter(e => e.status === 'ended'); const suggestions = allEvents.filter(e => e.status === 'suggestion');
 
             if (currentUser && ALL_ADMINS.includes(currentUser.name) && suggestions.length > 0) {
-                suggS?.classList.remove('hidden');
-                suggestions.forEach(ev => suggC.innerHTML += window.createEventCard(ev, 'suggestion'));
+
+                suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createEventCard(ev, 'suggestion'));
+
             } else suggS?.classList.add('hidden');
 
             if (actives.length === 0) document.getElementById('no-active-message')?.classList.remove('hidden');
-            else {
-                document.getElementById('no-active-message')?.classList.add('hidden');
-                actives.forEach(ev => actC.innerHTML += window.createEventCard(ev, 'active'));
-            }
+
+            else { document.getElementById('no-active-message')?.classList.add('hidden'); actives.forEach(ev => actC.innerHTML += window.createEventCard(ev, 'active')); }
 
             if(histC) history.forEach(ev => histC.innerHTML += window.createEventCard(ev, 'history'));
+
             lucide.createIcons();
+
         };
 
-        // --- SISTEMA DE EVENTOS DO CLÃ (INTERNOS) ---
+
+
         window.createClanEventCard = function(ev, type) {
-            const isP = currentUser && (ev.participants || []).includes(currentUser.name);
-            let controls = '';
-            // Apenas Luhnny administra eventos do clã (aprova/edita)
-            const isLuhnny = currentUser && currentUser.name === 'Luhnny';
-            const pCount = (ev.participants || []).length;
-            
-            const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
-            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
-            const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
-            
-            if (isLuhnny) {
-                // Adicionado botão Editar nas sugestões internas
-                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
-                else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatusInternal('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.deleteClanEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
-            } else {
-                 // Membros normais veem a lista de inscritos
-                 controls = pList;
-            }
 
-            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]">
-                <div class="flex justify-between items-start mb-1">
-                    <h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3>
-                    <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span>
-                </div>
-                ${creditText}
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4">
-                    <div class="space-y-2">
-                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p>
-                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p>
-                        <p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p>
-                    </div>
-                    <div class="space-y-2">
-                        ${prizeDisplay}
-                        <div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div>
-                    </div>
-                </div>
-                <div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>
-                ${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanEventJoin('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}
-                ${controls}
-            </div>`;
+            const isP = currentUser && (ev.participants || []).includes(currentUser.name);
+
+            let controls = ''; const isLuhnny = currentUser && currentUser.name === 'Luhnny'; const pCount = (ev.participants || []).length;
+
+            const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
+
+            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+
+            const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
+
+            if (isLuhnny) {
+
+                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
+
+                else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatusInternal('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.deleteClanEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
+
+            } else { controls = pList; }
+
+            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanEventJoin('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
+
         };
+
+
 
         window.renderClanEvents = function() {
-            const actC = document.getElementById('clan-active-events-list'); 
-            const histC = document.getElementById('clan-history-events-list'); 
-            const suggC = document.getElementById('clan-suggested-events-list');
-            const suggS = document.getElementById('clan-suggestions-section');
-            if(!actC) return;
-            
-            actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
 
-            const actives = allClanEvents.filter(e => e.status === 'active');
-            const history = allClanEvents.filter(e => e.status === 'ended');
-            const suggestions = allClanEvents.filter(e => e.status === 'suggestion');
+            const actC = document.getElementById('clan-active-events-list'); const histC = document.getElementById('clan-history-events-list'); const suggC = document.getElementById('clan-suggested-events-list'); const suggS = document.getElementById('clan-suggestions-section');
 
-            // Sugestões visíveis apenas para Luhnny
+            if(!actC) return; actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
+
+            const actives = allClanEvents.filter(e => e.status === 'active'); const history = allClanEvents.filter(e => e.status === 'ended'); const suggestions = allClanEvents.filter(e => e.status === 'suggestion');
+
             if (currentUser && currentUser.name === 'Luhnny' && suggestions.length > 0) {
-                suggS?.classList.remove('hidden');
-                suggestions.forEach(ev => suggC.innerHTML += window.createClanEventCard(ev, 'suggestion'));
+
+                suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createClanEventCard(ev, 'suggestion'));
+
             } else suggS?.classList.add('hidden');
 
             if (actives.length === 0) document.getElementById('clan-no-active-message')?.classList.remove('hidden');
-            else {
-                document.getElementById('clan-no-active-message')?.classList.add('hidden');
-                actives.forEach(ev => actC.innerHTML += window.createClanEventCard(ev, 'active'));
-            }
+
+            else { document.getElementById('clan-no-active-message')?.classList.add('hidden'); actives.forEach(ev => actC.innerHTML += window.createClanEventCard(ev, 'active')); }
 
             if(histC) history.forEach(ev => histC.innerHTML += window.createClanEventCard(ev, 'history'));
+
             lucide.createIcons();
+
         };
+
+
 
         window.publishClanEventData = async () => {
-             // Luhnny cria direto como ativo, outros sugerem
+
             const isLuhnny = currentUser && currentUser.name === 'Luhnny';
-            const data = {
-                title: document.getElementById('clan-ev-title').value,
-                theme: document.getElementById('clan-ev-theme').value,
-                date: document.getElementById('clan-ev-date').value,
-                time: document.getElementById('clan-ev-time').value,
-                location: document.getElementById('clan-ev-loc').value || "Servidor bawMC",
-                prizes: [document.getElementById('clan-ev-p1').value, document.getElementById('clan-ev-p2').value, document.getElementById('clan-ev-p3').value],
-                rules: document.getElementById('clan-ev-rules').value,
-                status: isLuhnny ? 'active' : 'suggestion',
-                // Se estiver editando, mantém o autor original, senão usa o atual
-                suggestedBy: (editingClanEventId && editingClanEventAuthor) ? editingClanEventAuthor : currentUser.name,
-                participants: [],
-                createdAt: Date.now()
-            };
+
+            const data = { title: document.getElementById('clan-ev-title').value, theme: document.getElementById('clan-ev-theme').value, date: document.getElementById('clan-ev-date').value, time: document.getElementById('clan-ev-time').value, location: document.getElementById('clan-ev-loc').value || "Servidor bawMC", prizes: [document.getElementById('clan-ev-p1').value, document.getElementById('clan-ev-p2').value, document.getElementById('clan-ev-p3').value], rules: document.getElementById('clan-ev-rules').value, status: isLuhnny ? 'active' : 'suggestion', suggestedBy: (editingClanEventId && editingClanEventAuthor) ? editingClanEventAuthor : currentUser.name, participants: [], createdAt: Date.now() };
+
             if (editingClanEventId) {
-                // Se Luhnny editar, vira 'active'
-                if (isLuhnny) data.status = 'active';
-                // Preserva participantes existentes ao editar
-                const oldEvent = allClanEvents.find(e => e.id === editingClanEventId);
-                if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
-                
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', editingClanEventId), data);
-                editingClanEventId = null;
-                editingClanEventAuthor = null;
-            } else {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), data);
-            }
-            window.closeModal('modal-clan-event');
-            window.notify(isLuhnny ? "Evento do Clã Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
-        };
-        
-        window.approveClanEventInternal = async (id) => {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { status: 'active' });
-            window.notify("Evento do Clã aprovado!", "success", false);
+
+                if (isLuhnny) data.status = 'active'; const oldEvent = allClanEvents.find(e => e.id === editingClanEventId); if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
+
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', editingClanEventId), data); editingClanEventId = null; editingClanEventAuthor = null;
+
+            } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), data); }
+
+            window.closeModal('modal-clan-event'); window.notify(isLuhnny ? "Evento do Clã Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
+
         };
 
-        window.updateClanEventStatusInternal = async (id, current) => {
-            const next = current === 'active' ? 'ended' : 'active';
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { status: next });
-        };
         
-        window.toggleClanEventJoin = async (id) => {
-            const ev = allClanEvents.find(e => e.id === id);
-            const p = ev.participants || [];
-            const next = p.includes(currentUser.name) ? p.filter(x => x !== currentUser.name) : [...p, currentUser.name];
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { participants: next });
-        };
 
-        window.deleteClanEvent = async (id) => {
-             // Simplified delete without confirmation modal reuse to avoid complexity, or use confirm
-             clanEventToDeleteId = id; 
-             // We can reuse the same modal but changing the callback
-             // For simplicity let's do direct delete for now or create a specific modal if needed. 
-             // Let's reuse the modal logic by setting a flag or just a separate modal. 
-             // Let's assume direct delete for now as requested format implies standard handling.
-             await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id));
-        };
-        
-        window.editClanEventInternal = (id) => {
-            const ev = allClanEvents.find(e => e.id === id);
-            editingClanEventId = id;
-            editingClanEventAuthor = ev.suggestedBy; // Salva o autor original
-            document.getElementById('clan-ev-title').value = ev.title;
-            document.getElementById('clan-ev-theme').value = ev.theme;
-            document.getElementById('clan-ev-date').value = ev.date;
-            document.getElementById('clan-ev-time').value = ev.time || '';
-            document.getElementById('clan-ev-loc').value = ev.location;
-            document.getElementById('clan-ev-p1').value = ev.prizes?.[0] || '';
-            document.getElementById('clan-ev-p2').value = ev.prizes?.[1] || '';
-            document.getElementById('clan-ev-p3').value = ev.prizes?.[2] || '';
-            document.getElementById('clan-ev-rules').value = ev.rules;
-            window.openModal('modal-clan-event');
-        };
-        
-        window.openCreateClanEventModal = () => {
-             editingClanEventId = null;
-             editingClanEventAuthor = null;
-             document.getElementById('modal-clan-event-form').reset();
-             window.openModal('modal-clan-event');
-        };
+        window.approveClanEventInternal = async (id) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { status: 'active' }); window.notify("Evento do Clã aprovado!", "success", false); };
+
+        window.updateClanEventStatusInternal = async (id, current) => { const next = current === 'active' ? 'ended' : 'active'; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { status: next }); };
+
+        window.toggleClanEventJoin = async (id) => { const ev = allClanEvents.find(e => e.id === id); const p = ev.participants || []; const next = p.includes(currentUser.name) ? p.filter(x => x !== currentUser.name) : [...p, currentUser.name]; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { participants: next }); };
+
+        window.deleteClanEvent = async (id) => { clanEventToDeleteId = id; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id)); };
+
+        window.editClanEventInternal = (id) => { const ev = allClanEvents.find(e => e.id === id); editingClanEventId = id; editingClanEventAuthor = ev.suggestedBy; document.getElementById('clan-ev-title').value = ev.title; document.getElementById('clan-ev-theme').value = ev.theme; document.getElementById('clan-ev-date').value = ev.date; document.getElementById('clan-ev-time').value = ev.time || ''; document.getElementById('clan-ev-loc').value = ev.location; document.getElementById('clan-ev-p1').value = ev.prizes?.[0] || ''; document.getElementById('clan-ev-p2').value = ev.prizes?.[1] || ''; document.getElementById('clan-ev-p3').value = ev.prizes?.[2] || ''; document.getElementById('clan-ev-rules').value = ev.rules; window.openModal('modal-clan-event'); };
+
+        window.openCreateClanEventModal = () => { editingClanEventId = null; editingClanEventAuthor = null; document.getElementById('modal-clan-event-form').reset(); window.openModal('modal-clan-event'); };
+
 
 
         window.publishClanEvent = async () => {
+
             const isAdmin = ALL_ADMINS.includes(currentUser.name);
-            const data = {
-                title: document.getElementById('ev-title').value,
-                theme: document.getElementById('ev-theme').value,
-                date: document.getElementById('ev-date').value,
-                time: document.getElementById('ev-time').value,
-                location: document.getElementById('ev-loc').value || "Servidor bawMC",
-                prizes: [document.getElementById('ev-p1').value, document.getElementById('ev-p2').value, document.getElementById('ev-p3').value],
-                rules: document.getElementById('ev-rules').value,
-                status: isAdmin ? 'active' : 'suggestion',
-                // Se estiver editando, mantém o autor original
-                suggestedBy: (editingEventId && editingEventAuthor) ? editingEventAuthor : currentUser.name,
-                participants: [],
-                createdAt: Date.now()
-            };
+
+            const data = { title: document.getElementById('ev-title').value, theme: document.getElementById('ev-theme').value, date: document.getElementById('ev-date').value, time: document.getElementById('ev-time').value, location: document.getElementById('ev-loc').value || "Servidor bawMC", prizes: [document.getElementById('ev-p1').value, document.getElementById('ev-p2').value, document.getElementById('ev-p3').value], rules: document.getElementById('ev-rules').value, status: isAdmin ? 'active' : 'suggestion', suggestedBy: (editingEventId && editingEventAuthor) ? editingEventAuthor : currentUser.name, participants: [], createdAt: Date.now() };
+
             if (editingEventId) {
-                // Se admin editar, vira 'active'
-                if (isAdmin) data.status = 'active';
-                // Preserva participantes
-                const oldEvent = allEvents.find(e => e.id === editingEventId);
-                if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
 
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data);
-                editingEventId = null;
-                editingEventAuthor = null;
-            } else {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data);
-            }
-            window.closeModal('modal-admin-event');
-            window.notify(isAdmin ? "Evento Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
+                if (isAdmin) data.status = 'active'; const oldEvent = allEvents.find(e => e.id === editingEventId); if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
+
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data); editingEventId = null; editingEventAuthor = null;
+
+            } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data); }
+
+            window.closeModal('modal-admin-event'); window.notify(isAdmin ? "Evento Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
+
         };
 
-        window.approveClanEvent = async (id) => {
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: 'active' });
-            window.notify("Evento aprovado!", "success", false);
-        };
 
-        window.updateClanEventStatus = async (id, current) => {
-            const next = current === 'active' ? 'ended' : 'active';
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: next });
-        };
 
-        window.toggleClanParticipation = async (id) => {
-            const ev = allEvents.find(e => e.id === id);
-            const p = ev.participants || [];
-            const next = p.includes(currentUser.name) ? p.filter(x => x !== currentUser.name) : [...p, currentUser.name];
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { participants: next });
-        };
+        window.approveClanEvent = async (id) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: 'active' }); window.notify("Evento aprovado!", "success", false); };
+
+        window.updateClanEventStatus = async (id, current) => { const next = current === 'active' ? 'ended' : 'active'; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: next }); };
+
+        window.toggleClanParticipation = async (id) => { const ev = allEvents.find(e => e.id === id); const p = ev.participants || []; const next = p.includes(currentUser.name) ? p.filter(x => x !== currentUser.name) : [...p, currentUser.name]; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { participants: next }); };
 
         window.requestDeleteEvent = (id) => { eventToDeleteId = id; window.openModal('modal-confirm-delete'); };
+
         window.confirmDelete = async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId)); window.closeModal('modal-confirm-delete'); };
 
-        window.editClanEvent = (id) => {
-            const ev = allEvents.find(e => e.id === id);
-            editingEventId = id;
-            editingEventAuthor = ev.suggestedBy; // Salva o autor original
-            document.getElementById('ev-title').value = ev.title;
-            document.getElementById('ev-theme').value = ev.theme;
-            document.getElementById('ev-date').value = ev.date;
-            document.getElementById('ev-time').value = ev.time || '';
-            document.getElementById('ev-loc').value = ev.location;
-            document.getElementById('ev-p1').value = ev.prizes?.[0] || '';
-            document.getElementById('ev-p2').value = ev.prizes?.[1] || '';
-            document.getElementById('ev-p3').value = ev.prizes?.[2] || '';
-            document.getElementById('ev-rules').value = ev.rules;
-            window.openModal('modal-admin-event');
-        };
+        window.editClanEvent = (id) => { const ev = allEvents.find(e => e.id === id); editingEventId = id; editingEventAuthor = ev.suggestedBy; document.getElementById('ev-title').value = ev.title; document.getElementById('ev-theme').value = ev.theme; document.getElementById('ev-date').value = ev.date; document.getElementById('ev-time').value = ev.time || ''; document.getElementById('ev-loc').value = ev.location; document.getElementById('ev-p1').value = ev.prizes?.[0] || ''; document.getElementById('ev-p2').value = ev.prizes?.[1] || ''; document.getElementById('ev-p3').value = ev.prizes?.[2] || ''; document.getElementById('ev-rules').value = ev.rules; window.openModal('modal-admin-event'); };
 
-        // --- GESTÃO DE ALIANÇAS ---
-        window.publishClanAlliance = async () => {
-            const name = document.getElementById('ali-name').value;
-            const tag = document.getElementById('ali-tag').value;
-            const isAdmin = SUPER_ADMINS.includes(currentUser.name);
-            if(isAdmin) {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() });
-                window.notify("Aliança criada!", "success", false);
-            } else {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() });
-                window.notify("Solicitação enviada!", "success", false);
-            }
-            window.closeModal('modal-admin-alliance');
-        };
 
-        window.approveAllianceRequest = async (id, d) => { 
-            if (currentUser.name !== "Luhnny") return; 
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: d.name, tag: d.tag, members: [], createdAt: Date.now() }); 
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); 
-        };
-        window.rejectAllianceRequest = async (id) => { 
-            if (currentUser.name !== "Luhnny") return; 
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); 
-        };
-        window.removeAllyMember = async (id, n) => { 
-            const a = allAlliances.find(x => x.id === id); 
-            if(a) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); 
-        };
-        window.deleteIdentity = async (n) => { 
-            try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); 
-                window.notify("Vínculo removido.", "info", false); 
-            } catch (e) {
-                console.error("Erro ao deletar:", e);
-                window.notify("Erro ao remover: " + e.message, "error", false);
-            }
-        };
+
+        window.publishClanAlliance = async () => { const name = document.getElementById('ali-name').value; const tag = document.getElementById('ali-tag').value; const isAdmin = SUPER_ADMINS.includes(currentUser.name); if(isAdmin) { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() }); window.notify("Aliança criada!", "success", false); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() }); window.notify("Solicitação enviada!", "success", false); } window.closeModal('modal-admin-alliance'); };
+
+        window.approveAllianceRequest = async (id, d) => { if (currentUser.name !== "Luhnny") return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: d.name, tag: d.tag, members: [], createdAt: Date.now() }); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
+
+        window.rejectAllianceRequest = async (id) => { if (currentUser.name !== "Luhnny") return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
+
+        window.removeAllyMember = async (id, n) => { const a = allAlliances.find(x => x.id === id); if(a) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); };
+
+        window.deleteIdentity = async (n) => { try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); window.notify("Vínculo removido.", "info", false); } catch (e) { console.error("Erro ao deletar:", e); window.notify("Erro ao remover: " + e.message, "error", false); } };
+
         window.requestDeleteAlliance = (id) => { allianceToDeleteId = id; window.openModal('modal-confirm-alliance-delete'); };
-        window.confirmAllianceDelete = async () => { 
-            if (!allianceToDeleteId) return; 
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId)); 
-            window.closeModal('modal-confirm-alliance-delete'); 
-        };
+
+        window.confirmAllianceDelete = async () => { if (!allianceToDeleteId) return; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId)); window.closeModal('modal-confirm-alliance-delete'); };
+
+
 
         window.renderIdentities = function() {
-            const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
-            const allyIdenC = document.getElementById('ally-identities-section');
-            const allyIdenL = document.getElementById('ally-identities-list');
-            const memIdenC = document.getElementById('member-identities-section');
-            const memIdenL = document.getElementById('member-identities-list');
 
-            if (!isAdmin) {
-                if(allyIdenC) allyIdenC.classList.add('hidden');
-                if(memIdenC) memIdenC.classList.add('hidden');
-                return;
-            }
+            const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name); const allyIdenC = document.getElementById('ally-identities-section'); const allyIdenL = document.getElementById('ally-identities-list'); const memIdenC = document.getElementById('member-identities-section'); const memIdenL = document.getElementById('member-identities-list');
 
-            // Filtragem segura
-            const members = allIdentities.filter(i => {
-                const nick = i.nick || "";
-                return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase());
-            });
-            
+            if (!isAdmin) { if(allyIdenC) allyIdenC.classList.add('hidden'); if(memIdenC) memIdenC.classList.add('hidden'); return; }
+
+            const members = allIdentities.filter(i => { const nick = i.nick || ""; return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase()); });
+
             const allies = allIdentities.filter(i => !members.includes(i));
 
-            if (allyIdenC && allyIdenL) {
-                allyIdenC.classList.remove('hidden');
-                let alliesHtml = '';
-                if (allies.length === 0) alliesHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>';
-                else {
-                    allies.forEach(i => {
-                        alliesHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
-                    });
-                }
-                allyIdenL.innerHTML = alliesHtml;
-            }
+            if (allyIdenC && allyIdenL) { allyIdenC.classList.remove('hidden'); let alliesHtml = ''; if (allies.length === 0) alliesHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>'; else { allies.forEach(i => { alliesHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`; }); } allyIdenL.innerHTML = alliesHtml; }
 
-            if (memIdenC && memIdenL) {
-                memIdenC.classList.remove('hidden');
-                let membersHtml = '';
-                if (members.length === 0) membersHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>';
-                else {
-                    members.forEach(i => {
-                        membersHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
-                    });
-                }
-                memIdenL.innerHTML = membersHtml;
-            }
+            if (memIdenC && memIdenL) { memIdenC.classList.remove('hidden'); let membersHtml = ''; if (members.length === 0) membersHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>'; else { members.forEach(i => { membersHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`; }); } memIdenL.innerHTML = membersHtml; }
+
             lucide.createIcons();
+
         };
+
+
 
         window.renderAlliances = function() {
-            const c = document.getElementById('alliances-list'); if (!c) return;
-            const reqC = document.getElementById('alliance-requests-section');
-            const reqL = document.getElementById('alliance-requests-list');
-            const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
-            c.innerHTML = '';
-            
-            if (allAlliances.length === 0) {
-                c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`;
-            } else {
-                allAlliances.forEach(a => {
-                    const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join('');
-                    c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isAdmin ? `<button onclick="window.requestDeleteAlliance('${a.id}')" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`;
-                });
-            }
-            if (currentUser && currentUser.name === "Luhnny" && allAllianceRequests.length > 0) {
-                reqC.classList.remove('hidden'); reqL.innerHTML = '';
-                allAllianceRequests.forEach(r => {
-                    reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`;
-                });
-            } else reqC?.classList.add('hidden');
-            // Removida chamada redundante de renderIdentities daqui
+
+            const c = document.getElementById('alliances-list'); if (!c) return; const reqC = document.getElementById('alliance-requests-section'); const reqL = document.getElementById('alliance-requests-list'); const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name); c.innerHTML = '';
+
+            if (allAlliances.length === 0) { c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`; } else { allAlliances.forEach(a => { const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join(''); c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isAdmin ? `<button onclick="window.requestDeleteAlliance('${a.id}')" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`; }); }
+
+            if (currentUser && currentUser.name === "Luhnny" && allAllianceRequests.length > 0) { reqC.classList.remove('hidden'); reqL.innerHTML = ''; allAllianceRequests.forEach(r => { reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`; }); } else reqC?.classList.add('hidden');
+
         };
 
-        // --- RECRUTAMENTO ---
-        window.updateApplicationStatus = async (id, status) => {
-            if (!currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), {
-                status: status,
-                handledBy: currentUser.name
-            });
-            window.notify(`Pedido ${status}!`, "success", false);
-        };
 
-        // Função de deletar modificada para aceitar status
-        window.requestDeleteApplication = (id, status) => { 
-            applicationToDeleteId = id; 
-            applicationToDeleteStatus = status; // Salva o status para decidir se arquiva ou deleta
-            window.openModal('modal-confirm-rec-delete'); 
-        };
 
-        window.confirmRecDelete = async () => { 
-            if (!applicationToDeleteId) return;
+        window.updateApplicationStatus = async (id, status) => { if (!currentUser || !SUPER_ADMINS.includes(currentUser.name)) return; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), { status: status, handledBy: currentUser.name }); window.notify(`Pedido ${status}!`, "success", false); };
 
-            // Se for aprovado, apenas arquiva (esconde da lista admin) mas mantêm o doc
-            if (applicationToDeleteStatus === 'aprovado') {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId), {
-                    archived: true
-                });
-                window.notify("Candidatura arquivada da lista. O membro continua ativo!", "success", false);
-            } else {
-                // Se for pendente, negado, ou outro, deleta de verdade
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); 
-                window.notify("Candidatura removida permanentemente.", "success", false); 
-            }
-            
-            window.closeModal('modal-confirm-rec-delete'); 
-        };
+        window.requestDeleteApplication = (id, status) => { applicationToDeleteId = id; applicationToDeleteStatus = status; window.openModal('modal-confirm-rec-delete'); };
 
-        window.toggleRecruitmentStatus = async () => {
-            if (currentUser?.name !== "Luhnny") return;
-            const newStatus = !isRecruitmentOpen;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), { isOpen: newStatus });
-        };
+        window.confirmRecDelete = async () => { if (!applicationToDeleteId) return; if (applicationToDeleteStatus === 'aprovado') { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId), { archived: true }); window.notify("Candidatura arquivada da lista. O membro continua ativo!", "success", false); } else { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.notify("Candidatura removida permanentemente.", "success", false); } window.closeModal('modal-confirm-rec-delete'); };
+
+        window.toggleRecruitmentStatus = async () => { if (currentUser?.name !== "Luhnny") return; const newStatus = !isRecruitmentOpen; await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), { isOpen: newStatus }); };
 
         window.renderAdminApplications = function() {
-            const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
-            c.innerHTML = '';
-            
-            // Filtra arquivados para não poluir a lista
-            const visibleApps = allApplications.filter(app => !app.archived);
 
-            if (visibleApps.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido ativo.</p>'; }
-            else {
-                visibleApps.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => {
-                    const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' };
-                    const decisor = app.handledBy ? `<div class="mt-4 pt-2 border-t text-[11px] font-bold text-pink-500 uppercase">Decidido por: ${app.handledBy}</div>` : '';
-                    
-                    // Passa o status para a função de deletar
-                    c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-sm text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div><div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-sm">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}', '${app.status}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${decisor}</div>`;
-                });
-            }
-            lucide.createIcons();
+            const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
+
+            c.innerHTML = ''; const visibleApps = allApplications.filter(app => !app.archived);
+
+            if (visibleApps.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido ativo.</p>'; } else { visibleApps.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => { const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' }; const decisor = app.handledBy ? `<div class="mt-4 pt-2 border-t text-[11px] font-bold text-pink-500 uppercase">Decidido por: ${app.handledBy}</div>` : ''; c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-sm text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>Tempo:</strong> ${app.tempo}h</p><p><strong>Combate:</strong> ${app.combate}</p><p><strong>Build:</strong> ${app.build}</p><p><strong>Farm:</strong> ${app.farm}</p><p><strong>Rank:</strong> ${app.rank}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div><div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-sm">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}', '${app.status}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${decisor}</div>`; }); } lucide.createIcons();
+
         };
 
-        // --- NOVA FUNÇÃO: Renderizar status para o usuário local (sem login) ---
+
+
         let recruitmentTimerInterval = null;
 
         window.renderMyRecruitmentStatus = function() {
-            const localId = localStorage.getItem('afk_recruitment_id');
-            const statusContainer = document.getElementById('my-recruitment-status');
-            
-            if (!statusContainer) return;
-            
-            // Se não tem ID local, não mostra nada
-            if (!localId) {
-                statusContainer.innerHTML = '';
-                if(recruitmentTimerInterval) clearInterval(recruitmentTimerInterval);
-                return;
-            }
 
-            // Se a lista ainda está carregando, mostra loading simples
-            if (initialRecruitmentListLoad) {
-                statusContainer.innerHTML = '<div class="mb-10 text-slate-400 italic text-sm">Verificando status...</div>';
-                return;
-            }
+            const localId = localStorage.getItem('afk_recruitment_id'); const statusContainer = document.getElementById('my-recruitment-status');
 
-            // Procura na lista global
+            if (!statusContainer) return; if (!localId) { statusContainer.innerHTML = ''; if(recruitmentTimerInterval) clearInterval(recruitmentTimerInterval); return; }
+
+            if (initialRecruitmentListLoad) { statusContainer.innerHTML = '<div class="mb-10 text-slate-400 italic text-sm">Verificando status...</div>'; return; }
+
             let myApp = allApplications.find(a => a.id === localId);
-            
-            // LÓGICA DE STATUS:
-            // Se não achou (excluído) OU se o status é explicitamente 'negado' -> Trata como NEGADO
-            // Se achou -> usa o status real
-            let displayStatus = myApp ? myApp.status : 'negado'; 
-            let displayNick = myApp ? myApp.nick : 'Candidato';
-            let displayHandledBy = myApp ? myApp.handledBy : null;
 
-            const colors = { 
-                aprovado: 'bg-green-50 border-green-200 text-green-600', 
-                negado: 'bg-red-50 border-red-200 text-red-600', 
-                pendente: 'bg-yellow-50 border-yellow-200 text-yellow-600' 
-            };
-            
-            const icon = {
-                aprovado: 'check-circle',
-                negado: 'x-circle',
-                pendente: 'clock'
-            };
-            
-            const msg = {
-                aprovado: 'Parabéns! Foste aceito no Clã AFK!',
-                negado: 'Infelizmente sua candidatura não foi aceita desta vez.',
-                pendente: 'A tua candidatura está em análise. Aguarda!'
-            };
+            let displayStatus = myApp ? myApp.status : 'negado'; let displayNick = myApp ? myApp.nick : 'Candidato'; let displayHandledBy = myApp ? myApp.handledBy : null;
 
-            const statusClass = colors[displayStatus] || colors['pendente'];
-            const statusIcon = icon[displayStatus] || 'clock';
-            const statusMsg = msg[displayStatus] || 'Status desconhecido';
+            const colors = { aprovado: 'bg-green-50 border-green-200 text-green-600', negado: 'bg-red-50 border-red-200 text-red-600', pendente: 'bg-yellow-50 border-yellow-200 text-yellow-600' };
 
-            // Verifica se pode tentar novamente (apenas se for NEGADO/EXCLUÍDO)
-            let actionHtml = '';
-            if (displayStatus === 'negado') {
-                const today = new Date().toDateString();
-                const lastSub = localStorage.getItem('afk_last_submission_date');
-                
-                if (lastSub !== today) {
-                    // Já passou o dia, libera botão
-                    actionHtml = `
-                        <div class="mt-6 pt-6 border-t border-red-200">
-                            <p class="text-xs font-bold text-red-400 uppercase mb-2">Você já pode tentar novamente!</p>
-                            <button onclick="localStorage.removeItem('afk_recruitment_id'); window.renderMyRecruitmentStatus();" class="bg-white border-2 border-red-200 text-red-500 px-6 py-2 rounded-xl font-bold shadow-sm hover:bg-red-50 transition uppercase text-xs">Nova Candidatura</button>
-                        </div>
-                    `;
-                } else {
-                    // Ainda é o mesmo dia, mostra contador
-                    actionHtml = `
-                        <div class="mt-6 pt-6 border-t border-red-200">
-                            <p class="text-[10px] font-bold text-red-400 uppercase mb-1">Próxima tentativa em:</p>
-                            <div id="recruitment-countdown" class="text-xl font-mono font-bold text-red-500">Calculando...</div>
-                        </div>
-                    `;
-                    
-                    // Inicia Timer
-                    if(recruitmentTimerInterval) clearInterval(recruitmentTimerInterval);
-                    const updateTimer = () => {
-                        const now = new Date();
-                        const tomorrow = new Date(now);
-                        tomorrow.setDate(tomorrow.getDate() + 1);
-                        tomorrow.setHours(0, 0, 0, 0);
-                        
-                        const diff = tomorrow - now;
-                        if (diff <= 0) {
-                            window.renderMyRecruitmentStatus(); // Atualiza para mostrar botão
-                            return;
-                        }
-                        
-                        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-                        
-                        const el = document.getElementById('recruitment-countdown');
-                        if(el) el.innerText = `${hours}h ${minutes}m ${seconds}s`;
-                    };
-                    updateTimer();
-                    recruitmentTimerInterval = setInterval(updateTimer, 1000);
-                }
-            }
+            const icon = { aprovado: 'check-circle', negado: 'x-circle', pendente: 'clock' };
 
-            statusContainer.innerHTML = `
-                <div class="mb-10 p-8 rounded-3xl border-2 text-center ${statusClass} shadow-lg transform transition-all">
-                    <div class="flex justify-center mb-4">
-                        <i data-lucide="${statusIcon}" class="w-12 h-12"></i>
-                    </div>
-                    <h3 class="text-2xl font-extrabold uppercase mb-2 tracking-tighter">${displayStatus.toUpperCase()}</h3>
-                    <p class="font-medium text-lg opacity-90 leading-tight">${statusMsg}</p>
-                    <p class="mt-4 text-xs font-bold opacity-60 uppercase">Nick: ${displayNick}</p>
-                    ${displayHandledBy ? `<p class="mt-1 text-[10px] font-bold opacity-50 uppercase">Analisado por: ${displayHandledBy}</p>` : ''}
-                    ${actionHtml}
-                </div>
-            `;
-            lucide.createIcons();
+            const msg = { aprovado: 'Parabéns! Foste aceito no Clã AFK!', negado: 'Infelizmente sua candidatura não foi aceita desta vez.', pendente: 'A tua candidatura está em análise. Aguarda!' };
+
+            const statusClass = colors[displayStatus] || colors['pendente']; const statusIcon = icon[displayStatus] || 'clock'; const statusMsg = msg[displayStatus] || 'Status desconhecido';
+
+            let actionHtml = ''; if (displayStatus === 'negado') { const today = new Date().toDateString(); const lastSub = localStorage.getItem('afk_last_submission_date'); if (lastSub !== today) { actionHtml = `<div class="mt-6 pt-6 border-t border-red-200"><p class="text-xs font-bold text-red-400 uppercase mb-2">Você já pode tentar novamente!</p><button onclick="localStorage.removeItem('afk_recruitment_id'); window.renderMyRecruitmentStatus();" class="bg-white border-2 border-red-200 text-red-500 px-6 py-2 rounded-xl font-bold shadow-sm hover:bg-red-50 transition uppercase text-xs">Nova Candidatura</button></div>`; } else { actionHtml = `<div class="mt-6 pt-6 border-t border-red-200"><p class="text-[10px] font-bold text-red-400 uppercase mb-1">Próxima tentativa em:</p><div id="recruitment-countdown" class="text-xl font-mono font-bold text-red-500">Calculando...</div></div>`; if(recruitmentTimerInterval) clearInterval(recruitmentTimerInterval); const updateTimer = () => { const now = new Date(); const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0, 0, 0, 0); const diff = tomorrow - now; if (diff <= 0) { window.renderMyRecruitmentStatus(); return; } const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)); const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)); const seconds = Math.floor((diff % (1000 * 60)) / 1000); const el = document.getElementById('recruitment-countdown'); if(el) el.innerText = `${hours}h ${minutes}m ${seconds}s`; }; updateTimer(); recruitmentTimerInterval = setInterval(updateTimer, 1000); } }
+
+            statusContainer.innerHTML = `<div class="mb-10 p-8 rounded-3xl border-2 text-center ${statusClass} shadow-lg transform transition-all"><div class="flex justify-center mb-4"><i data-lucide="${statusIcon}" class="w-12 h-12"></i></div><h3 class="text-2xl font-extrabold uppercase mb-2 tracking-tighter">${displayStatus.toUpperCase()}</h3><p class="font-medium text-lg opacity-90 leading-tight">${statusMsg}</p><p class="mt-4 text-xs font-bold opacity-60 uppercase">Nick: ${displayNick}</p>${displayHandledBy ? `<p class="mt-1 text-[10px] font-bold opacity-50 uppercase">Analisado por: ${displayHandledBy}</p>` : ''}${actionHtml}</div>`; lucide.createIcons();
+
         };
+
+
 
         window.updateUI = function() {
+
             const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
+
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
 
-            const aRecPanel = document.getElementById('admin-recruitment-section');
-            const aAllyBtn = document.getElementById('admin-alliance-panel');
-            const lBtn = document.getElementById('btn-login-trigger'); 
-            const uDisp = document.getElementById('user-logged-in');
-            const aEventBtn = document.getElementById('admin-event-panel');
-            const aMissionBtn = document.getElementById('btn-missoes');
-            const aMissionAdmin = document.getElementById('admin-mission-controls');
-            const aGiveawayBtn = document.getElementById('btn-admin-giveaway'); 
-            const aClanEventBtn = document.getElementById('btn-clan-event-panel'); // Botão criar evento do clã (Luhnny apenas)
-            
-            const recToggle = document.getElementById('luhnny-recruitment-toggle');
-            const recFormS = document.getElementById('recruitment-form-section');
-            const recClosedM = document.getElementById('recruitment-closed-message');
+            const canManageMissions = currentUser && MISSION_ADMINS.includes(currentUser.name);
+
+            const aRecPanel = document.getElementById('admin-recruitment-section'); const aAllyBtn = document.getElementById('admin-alliance-panel'); const lBtn = document.getElementById('btn-login-trigger'); const uDisp = document.getElementById('user-logged-in'); const aEventBtn = document.getElementById('admin-event-panel'); const aMissionBtn = document.getElementById('btn-missoes'); const aMissionAdmin = document.getElementById('admin-mission-controls'); const aGiveawayBtn = document.getElementById('btn-admin-giveaway'); const aClanEventBtn = document.getElementById('btn-clan-event-panel'); const recToggle = document.getElementById('luhnny-recruitment-toggle'); const recFormS = document.getElementById('recruitment-form-section'); const recClosedM = document.getElementById('recruitment-closed-message');
 
             if (currentUser) {
-                lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden');
-                document.getElementById('logged-name').innerText = currentUser.name;
-                
-                // Super Admin Panels (Luhnny, Lagartuuuxaaa, K0ssh1_)
-                if (isSuperAdmin) {
-                    aRecPanel?.classList.remove('hidden');
-                    aAllyBtn?.classList.remove('hidden');
-                    recToggle?.classList.remove('hidden');
-                    recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO";
-                    recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`;
-                    aMissionAdmin?.classList.remove('hidden');
-                } else {
-                    aRecPanel?.classList.add('hidden');
-                    aAllyBtn?.classList.add('hidden');
-                    recToggle?.classList.add('hidden');
-                    aMissionAdmin?.classList.add('hidden');
-                }
 
-                // Event Admin Panels (Super Admins + SrLordM, Bone)
-                if (isEventAdmin) {
-                    aEventBtn?.classList.remove('hidden');
-                    aGiveawayBtn?.classList.remove('hidden');
-                } else {
-                    aEventBtn?.classList.add('hidden');
-                    aGiveawayBtn?.classList.add('hidden');
-                }
-                
-                // Botão de Evento do Clã (Apenas Luhnny cria direto, mas membros veem sugestão na renderização)
-                // Vamos deixar o botão visível se for membro (para sugestão) ou Luhnny (para criar)
-                if (!currentUser.isAlly) {
-                      aClanEventBtn?.classList.remove('hidden');
-                } else {
-                      aClanEventBtn?.classList.add('hidden');
-                }
+                lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden'); document.getElementById('logged-name').innerText = currentUser.name;
 
-                // Member features (Everyone except Allies)
-                if (!currentUser.isAlly) {
-                    aMissionBtn?.classList.remove('hidden');
-                } else {
-                    aMissionBtn?.classList.add('hidden');
-                }
+                if (isSuperAdmin) { aRecPanel?.classList.remove('hidden'); aAllyBtn?.classList.remove('hidden'); recToggle?.classList.remove('hidden'); recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO"; recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`; } else { aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); }
+
+                if (canManageMissions) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
+
+                if (isEventAdmin) { aEventBtn?.classList.remove('hidden'); aGiveawayBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); }
+
+                if (!currentUser.isAlly) { aClanEventBtn?.classList.remove('hidden'); aMissionBtn?.classList.remove('hidden'); } else { aClanEventBtn?.classList.add('hidden'); aMissionBtn?.classList.add('hidden'); }
 
             } else {
-                lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden');
-                aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden');
-                aMissionBtn?.classList.add('hidden');
-                aGiveawayBtn?.classList.add('hidden');
-                aClanEventBtn?.classList.add('hidden');
+
+                lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aMissionBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanEventBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden');
+
             }
 
-            if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); }
-            else { recFormS?.classList.add('hidden'); recClosedM?.classList.remove('hidden'); }
+            if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); } else { recFormS?.classList.add('hidden'); recClosedM?.classList.remove('hidden'); }
 
-            const hBadge = document.getElementById('header-rec-badge');
-            if (hBadge) {
-                hBadge.innerHTML = isRecruitmentOpen ? '<i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto' : '<i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado';
-                hBadge.className = `bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 shadow-2xl flex items-center gap-2 ${isRecruitmentOpen ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`;
-            }
+            const hBadge = document.getElementById('header-rec-badge'); if (hBadge) { hBadge.innerHTML = isRecruitmentOpen ? '<i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto' : '<i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado'; hBadge.className = `bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 shadow-2xl flex items-center gap-2 ${isRecruitmentOpen ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`; }
 
-            window.renderAdminApplications(); 
-            window.renderMyRecruitmentStatus(); // Atualiza o status local
-            window.renderAlliances(); 
-            window.renderEvents();
-            window.renderClanEvents();
-            window.renderIdentities();
-            window.renderMissions();
-            window.renderGiveaways();
-            window.renderMembers(); 
-            lucide.createIcons();
+            window.renderAdminApplications(); window.renderMyRecruitmentStatus(); window.renderAlliances(); window.renderEvents(); window.renderClanEvents(); window.renderIdentities(); window.renderMissions(); window.renderGiveaways(); window.renderMembers(); lucide.createIcons();
+
         };
 
-        // --- FUNÇÃO 1: Solicita a revisão (Chamada pelo Form) ---
-        window.requestRecruitmentReview = () => {
-            if (!isRecruitmentOpen) return;
 
-            const today = new Date().toDateString();
-            const lastSub = localStorage.getItem('afk_last_submission_date');
-            
-            if (lastSub === today) {
-                return window.notify("Você já enviou um formulário hoje. Tente novamente amanhã.", "error", true);
-            }
 
-            // Se passou nas verificações, abre o modal de confirmação
-            window.openModal('modal-review-recruitment');
-        };
-
-        // --- FUNÇÃO 2: Envio Real (Chamada pelo Modal de Confirmação) ---
-        window.confirmRecruitmentSubmission = async () => {
-            const data = {
-                nick: document.getElementById('rec-nick').value.trim(),
-                discord: document.getElementById('rec-discord').value.trim(),
-                idade: document.getElementById('rec-idade').value,
-                tempo: document.getElementById('rec-tempo').value,
-                clas: document.getElementById('rec-clas').value,
-                combate: document.getElementById('rec-combate').value,
-                build: document.getElementById('rec-build').value,
-                farm: document.getElementById('rec-farm').value,
-                voice: document.getElementById('rec-voice').value,
-                plataforma: document.getElementById('rec-plat').value,
-                rank: document.getElementById('rec-rank').value,
-                horarios: document.getElementById('rec-horarios').value || "N/I",
-                aniversario: document.getElementById('rec-aniv').value || "N/I",
-                status: 'pendente',
-                createdAt: Date.now()
-            };
-            
-            // Salva o documento e pega a referência
-            const docRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), data);
-            
-            // Salva o ID no LocalStorage para persistência no computador
-            const today = new Date().toDateString();
-            localStorage.setItem('afk_recruitment_id', docRef.id);
-            localStorage.setItem('afk_last_submission_date', today);
-            
-            window.closeModal('modal-review-recruitment');
-            window.notify("Enviado com sucesso!", "success", false);
-            document.getElementById('form-recruitment').reset();
-            
-            // Força atualização da UI para mostrar o status imediatamente
-            window.renderMyRecruitmentStatus();
-        };
-
-        // --- SNAPSHOTS ---
         onAuthStateChanged(auth, async (u) => {
+
             if (!u) await signInAnonymously(auth);
-            
-            // Recrutamento
-            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { 
-                if (s.exists()) {
-                    const newData = s.data().isOpen;
-                    if (!initialRecruitmentLoad && newData !== isRecruitmentOpen) {
-                        window.notify(newData ? "🔔 Recrutamento ABERTO!" : "🔒 Recrutamento FECHADO", newData ? "success" : "info", false);
-                    }
-                    isRecruitmentOpen = newData; 
-                }
-                initialRecruitmentLoad = false;
-                window.updateUI(); 
-            });
 
-            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members'), (s) => { 
-                hiddenStaticMembers = s.exists() ? (s.data().nicks || []) : []; 
-                window.renderMembers(); 
-            });
+            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) { const newData = s.data().isOpen; if (!initialRecruitmentLoad && newData !== isRecruitmentOpen) { window.notify(newData ? "🔔 Recrutamento ABERTO!" : "🔒 Recrutamento FECHADO", newData ? "success" : "info", false); } isRecruitmentOpen = newData; } initialRecruitmentLoad = false; window.updateUI(); });
 
-            // Eventos - COM SOM
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { 
-                if (!initialEventLoad) {
-                    s.docChanges().forEach(change => {
-                        const d = change.doc.data();
-                        // Só notifica se for adicionado JÁ como ativo
-                        if (change.type === "added" && d.status === 'active') {
-                            window.notify("🎉 Novo Evento Criado!", "success", true);
-                        }
-                        // Ou se foi modificado de algo não-ativo para ativo (Aprovação)
-                        if (change.type === "modified" && d.status === 'active') {
-                            const old = allEvents.find(e => e.id === change.doc.id);
-                            if (old && old.status !== 'active') {
-                                window.notify("🎉 Novo Evento Criado!", "success", true);
-                            }
-                        }
-                    });
-                }
-                allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); 
-                window.renderEvents(); 
-                initialEventLoad = false;
-            });
-            
-            // Eventos do Clã - SEM SOM EXPLÍCITO PEDIDO MAS ÚTIL (Deixei sem som por enquanto para seguir estrito o pedido de "apenas evento ativo")
-            // Na verdade o pedido diz "apenas som em evento ativo", entende-se evento geral ou clã se estiver ativo.
-            // Vou colocar som se for novo evento do clã também, pois é um "evento ativo"
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), (s) => {
-                 if (!initialClanEventLoad) {
-                    s.docChanges().forEach(change => {
-                        const d = change.doc.data();
-                        if (change.type === "added" && d.status === 'active') {
-                            window.notify("🛡️ Novo Evento do Clã!", "success", true);
-                        }
-                        if (change.type === "modified" && d.status === 'active') {
-                            const old = allClanEvents.find(e => e.id === change.doc.id);
-                            if (old && old.status !== 'active') {
-                                window.notify("🛡️ Novo Evento do Clã!", "success", true);
-                            }
-                        }
-                    });
-                }
-                allClanEvents = s.docs.map(d => ({id:d.id, ...d.data()}));
-                window.renderClanEvents();
-                initialClanEventLoad = false;
-            });
+            onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members'), (s) => { hiddenStaticMembers = s.exists() ? (s.data().nicks || []) : []; window.renderMembers(); });
+
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { if (!initialEventLoad) { s.docChanges().forEach(change => { const d = change.doc.data(); if (change.type === "added" && d.status === 'active') window.notify("🎉 Novo Evento Criado!", "success", true); if (change.type === "modified" && d.status === 'active') { const old = allEvents.find(e => e.id === change.doc.id); if (old && old.status !== 'active') window.notify("🎉 Novo Evento Criado!", "success", true); } }); } allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); initialEventLoad = false; });
+
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), (s) => { if (!initialClanEventLoad) { s.docChanges().forEach(change => { const d = change.doc.data(); if (change.type === "added" && d.status === 'active') window.notify("🛡️ Novo Evento do Clã!", "success", true); if (change.type === "modified" && d.status === 'active') { const old = allClanEvents.find(e => e.id === change.doc.id); if (old && old.status !== 'active') window.notify("🛡️ Novo Evento do Clã!", "success", true); } }); } allClanEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderClanEvents(); initialClanEventLoad = false; });
 
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), (s) => { allMissions = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderMissions(); });
+
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
+
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
-            
-            // Recrutamento Decisão - COM SOM (Apenas para o dono do formulário)
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { 
-                if (!initialRecruitmentListLoad) {
-                    s.docChanges().forEach(change => {
-                        if (change.type === "modified") {
-                            const data = change.doc.data();
-                            // Verifica se o usuário logado é o dono da candidatura
-                            if (currentUser && data.nick && currentUser.name.toLowerCase() === data.nick.toLowerCase()) {
-                                if (data.status === 'aprovado') {
-                                    window.notify(`🎉 Parabéns! A tua candidatura foi APROVADA!`, "success", true);
-                                } else if (data.status === 'negado') {
-                                    window.notify(`🚫 A tua candidatura foi negada.`, "error", true);
-                                }
-                            }
-                        }
-                    });
-                }
-                allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); 
-                
-                // CORREÇÃO: Marca como carregado ANTES de renderizar para exibir o status imediatamente
-                initialRecruitmentListLoad = false;
 
-                window.renderAdminApplications(); 
-                window.renderMyRecruitmentStatus(); // Atualiza status para user local também
-                window.renderMembers(); 
-            });
-            
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { 
-                allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); 
-                window.renderIdentities(); 
-            });
-            
-            // Detalhes dos Membros (Overrides)
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'member_details'), (s) => {
-                memberDetailsOverrides = {};
-                s.docs.forEach(d => {
-                    memberDetailsOverrides[d.id] = d.data();
-                });
-                window.renderMembers();
-            });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { if (!initialRecruitmentListLoad) { s.docChanges().forEach(change => { if (change.type === "modified") { const data = change.doc.data(); if (currentUser && data.nick && currentUser.name.toLowerCase() === data.nick.toLowerCase()) { if (data.status === 'aprovado') window.notify(`🎉 Parabéns! A tua candidatura foi APROVADA!`, "success", true); else if (data.status === 'negado') window.notify(`🚫 A tua candidatura foi negada.`, "error", true); } } }); } allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); initialRecruitmentListLoad = false; window.renderAdminApplications(); window.renderMyRecruitmentStatus(); window.renderMembers(); });
 
-            // Sorteios - COM SOM
-            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => {
-                if (!initialGiveawayLoad) {
-                    s.docChanges().forEach(change => {
-                        if (change.type === "added") window.notify("🎁 Novo Sorteio Rolando!", "success", true);
-                        if (change.type === "modified") {
-                             const data = change.doc.data();
-                             if(data.winner && data.status === 'closed') window.notify(`🏆 Temos um vencedor no sorteio: ${data.winner}!`, "success", true);
-                        }
-                    });
-                }
-                allGiveaways = s.docs.map(d => ({id:d.id, ...d.data()}));
-                window.renderGiveaways();
-                initialGiveawayLoad = false;
-            });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderIdentities(); });
+
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'member_details'), (s) => { memberDetailsOverrides = {}; s.docs.forEach(d => { memberDetailsOverrides[d.id] = d.data(); }); window.renderMembers(); });
+
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => { if (!initialGiveawayLoad) { s.docChanges().forEach(change => { if (change.type === "added") window.notify("🎁 Novo Sorteio Rolando!", "success", true); if (change.type === "modified") { const data = change.doc.data(); if(data.winner && data.status === 'closed') window.notify(`🏆 Temos um vencedor no sorteio: ${data.winner}!`, "success", true); } }); } allGiveaways = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderGiveaways(); initialGiveawayLoad = false; });
 
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
-            // Também chama updateUI se não estiver logado para garantir que o renderMyRecruitmentStatus rode
+
             if (!saved) window.updateUI();
+
         });
 
-        window.populateAllySelectRegister = () => {
-            const s = document.getElementById('reg-clan'); if(!s) return;
-            let h = '<option value="">Selecionar clã</option><option value="C0RV0S">C0RV0S</option><option value="Tenebris">Tenebris</option>';
-            allAlliances.forEach(a => { if(a.name!=="C0RV0S" && a.name!=="Tenebris") h += `<option value="${a.name}">${a.name}</option>`; });
-            s.innerHTML = h;
-        };
-        
-        window.openCreateModal = () => { 
-            editingEventId = null; 
-            editingEventAuthor = null;
-            document.getElementById('modal-admin-event-form').reset(); 
-            window.openModal('modal-admin-event'); 
-        };
+
+
+        window.populateAllySelectRegister = () => { const s = document.getElementById('reg-clan'); if(!s) return; let h = '<option value="">Selecionar clã</option><option value="C0RV0S">C0RV0S</option><option value="Tenebris">Tenebris</option>'; allAlliances.forEach(a => { if(a.name!=="C0RV0S" && a.name!=="Tenebris") h += `<option value="${a.name}">${a.name}</option>`; }); s.innerHTML = h; };
+
+        window.openCreateModal = () => { editingEventId = null; editingEventAuthor = null; document.getElementById('modal-admin-event-form').reset(); window.openModal('modal-admin-event'); };
+
     </script>
+
 </head>
+
 <body class="min-h-screen text-slate-800 pb-20">
+
+
 
     <div id="toast" style="display:none"></div>
 
+
+
     <header class="py-16 px-4 text-center pink-gradient text-white shadow-lg mb-6 relative overflow-hidden">
+
         <div class="absolute top-6 right-6 md:top-8 md:right-12 recruitment-badge">
+
             <div id="header-rec-badge" class="bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 border-pink-200 shadow-2xl flex items-center gap-2">
+
                 <i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto
+
             </div>
+
         </div>
+
         <h1 class="text-6xl font-extrabold tracking-tight mb-2 uppercase">CLÃ AFK</h1>
+
         <p class="text-pink-50 font-medium opacity-90 uppercase tracking-widest">Criado por Luhnny</p>
+
         <div class="mt-6 flex justify-center w-full">
+
             <button id="btn-login-trigger" onclick="window.openModal('modal-login')" class="bg-white text-pink-600 px-8 py-3 rounded-xl text-lg font-bold shadow-2xl transition hover:scale-105 active:scale-95 uppercase tracking-tighter btn-attention flex items-center gap-2">
+
                 <i data-lucide="log-in" class="w-5 h-5"></i> Acessar Conta
+
             </button>
+
             <div id="user-logged-in" class="hidden bg-white/20 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-3">
+
                 <span>Olá, <strong id="logged-name"></strong></span>
+
                 <button onclick="localStorage.removeItem('afk_user'); location.reload();" class="hover:text-red-200 transition font-bold uppercase text-[10px]">Sair</button>
+
             </div>
+
         </div>
+
     </header>
 
+
+
     <nav class="max-w-6xl mx-auto px-6 mb-10 border-b border-pink-200 text-center">
+
         <div class="flex gap-2 md:gap-8 justify-center flex-wrap">
+
             <button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-sm md:text-lg font-semibold tab-active transition-all">Apresentação</button>
+
             <button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button>
+
             <button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button>
+
             <button onclick="window.switchTab('clan-events')" id="btn-clan-events" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos do Clã</button>
+
             <button onclick="window.switchTab('missoes')" id="btn-missoes" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Missões</button>
+
             <button onclick="window.switchTab('sorteios')" id="btn-sorteios" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Sorteios</button>
+
             <button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button>
+
             <button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button>
+
         </div>
+
     </nav>
 
+
+
     <main class="max-w-6xl mx-auto px-6">
-        
+
         <!-- APRESENTAÇÃO -->
+
         <div id="tab-apresentacao">
+
             <div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed">
+
                 <div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div>
+
                 <h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2>
+
                 <div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8">
+
                     <p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p>
+
                     <p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.</p>
+
                     <p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p>
+
                 </div>
+
                 <div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left shadow-inner transition-transform hover:scale-[1.01]">
+
                     <i data-lucide="message-circle" class="text-pink-500 w-10 h-10 flex-shrink-0"></i>
+
                     <p class="text-sm md:text-base font-medium text-slate-700">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p>
+
                 </div>
+
             </div>
+
         </div>
 
+
+
         <!-- MEMBROS -->
+
         <div id="tab-membros" class="hidden">
-            <!-- PAINEL DE IDENTIDADES MEMBROS (FILTRADO) -->
+
             <div id="member-identities-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-slate-100">
+
                 <h3 class="text-xl font-bold text-slate-600 mb-6 uppercase tracking-tighter flex items-center justify-center gap-2"><i data-lucide="fingerprint"></i> Gerenciar Identidades (Membros)</h3>
+
                 <div id="member-identities-list" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+
             </div>
 
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2>
+
                 <div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div>
+
             </div>
-            
-            <!-- GRID DE MEMBROS (GERADO DINAMICAMENTE) -->
-            <div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
-                <!-- Conteúdo preenchido via JavaScript -->
-            </div>
+
+            <div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left"></div>
+
         </div>
 
+
+
         <!-- EVENTOS -->
+
         <div id="tab-eventos" class="hidden">
+
             <div class="bg-pink-50 border-2 border-pink-100 p-6 rounded-3xl mb-8 text-sm text-pink-700 max-w-4xl mx-auto flex items-start gap-4">
+
                 <i data-lucide="info" class="w-6 h-6 flex-shrink-0"></i>
+
                 <p><strong>Instrução:</strong> Você pode sugerir eventos para o clã. Basta apenas ter o nome do evento e o tema. A Luhnny revisará tudo antes de aprovar!</p>
+
             </div>
 
             <div id="suggestions-section" class="hidden mb-12">
+
                 <h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Pendentes</h3>
+
                 <div id="suggested-events-list"></div>
+
             </div>
 
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
+
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="calendar-heart"></i> Cronograma</h2>
+
                 <button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir Evento</button>
+
             </div>
 
             <div id="active-events-list"></div>
-            
+
             <div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto">
+
                 <h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3>
+
                 <p class="text-slate-500 text-lg">Novidades em breve!</p>
+
             </div>
 
             <div class="mt-16 border-t border-pink-100 pt-10 text-left">
+
                 <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico</h3>
+
                 <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+
             </div>
+
         </div>
+
         
-        <!-- EVENTOS DO CLÃ (NOVA ABA) -->
+
+        <!-- EVENTOS DO CLÃ -->
+
         <div id="tab-clan-events" class="hidden">
+
             <div class="bg-purple-50 border-2 border-purple-100 p-6 rounded-3xl mb-8 text-sm text-purple-700 max-w-4xl mx-auto flex items-start gap-4">
+
                 <i data-lucide="shield" class="w-6 h-6 flex-shrink-0"></i>
-                <p><strong>Área Restrita:</strong> Eventos exclusivos para membros do Clã AFK. Aliados não podem participar desta área.</p>
+
+                <p><strong>Área Restrita:</strong> Eventos exclusivos para membros do Clã AFK.</p>
+
             </div>
 
             <div id="clan-suggestions-section" class="hidden mb-12">
+
                 <h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Internas</h3>
+
                 <div id="clan-suggested-events-list"></div>
+
             </div>
 
             <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
+
                 <h2 class="text-2xl font-bold text-purple-500 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="swords"></i> Eventos Internos</h2>
+
                 <button id="btn-clan-event-panel" onclick="window.openCreateClanEventModal()" class="hidden bg-purple-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-purple-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir</button>
+
             </div>
 
             <div id="clan-active-events-list"></div>
-            
+
             <div id="clan-no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-purple-200 p-8 text-center max-w-4xl mx-auto">
+
                 <h3 class="text-3xl font-extrabold text-purple-400 mb-2 uppercase">Sem eventos internos</h3>
+
                 <p class="text-slate-500 text-lg">Sugira algo novo!</p>
+
             </div>
 
             <div class="mt-16 border-t border-purple-100 pt-10 text-left">
+
                 <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico Interno</h3>
+
                 <div id="clan-history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+
             </div>
+
         </div>
 
-        <!-- MISSÕES (NOVA ABA) -->
+
+
+        <!-- MISSÕES -->
+
         <div id="tab-missoes" class="hidden">
+
             <div id="admin-mission-controls" class="hidden mb-8 text-center">
+
                 <button onclick="window.openModal('modal-create-mission')" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
+
                     <i data-lucide="plus-circle"></i> Nova Missão
+
                 </button>
+
             </div>
+
             <div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+
         </div>
 
-        <!-- SORTEIOS (NOVA ABA) -->
+
+
+        <!-- SORTEIOS -->
+
         <div id="tab-sorteios" class="hidden">
+
             <div id="btn-admin-giveaway" class="hidden mb-8 text-center">
+
                 <button onclick="window.openCreateGiveawayModal()" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
+
                     <i data-lucide="gift"></i> Novo Sorteio
+
                 </button>
+
             </div>
+
             <div id="giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div>
+
         </div>
+
+
 
         <!-- ALIANÇAS -->
+
         <div id="tab-aliancas" class="hidden text-center">
+
             <div id="alliance-requests-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-yellow-100 text-center">
+
                 <h3 class="text-xl font-bold text-yellow-600 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="clock" class="w-6 h-6"></i> Solicitações Pendentes (Luhnny)</h3>
+
                 <div id="alliance-requests-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+
             </div>
-            
-            <!-- PAINEL DE IDENTIDADES ALIADOS (FILTRADO) -->
+
             <div id="ally-identities-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-slate-100">
+
                 <h3 class="text-xl font-bold text-slate-600 mb-6 uppercase tracking-tighter flex items-center justify-center gap-2"><i data-lucide="fingerprint"></i> Gerenciar Identidades (Aliados)</h3>
+
                 <div id="ally-identities-list" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3"></div>
+
             </div>
 
             <div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left">
+
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2>
+
                 <button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition uppercase leading-tight tracking-tighter">Adicionar Aliança</button>
+
             </div>
+
             <div id="alliances-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
         </div>
 
+
+
         <!-- RECRUTAMENTO -->
+
         <div id="tab-recrutamento" class="hidden text-center">
+
             <button id="luhnny-recruitment-toggle" onclick="window.toggleRecruitmentStatus()" class="hidden"></button>
+
             <div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200">
+
                 <h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center uppercase">Gerenciar Pedidos</h2>
+
                 <div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
             </div>
-            
-            <!-- ÁREA DE STATUS DA MINHA CANDIDATURA (MOVIDA PARA FORA DO FORMULÁRIO PARA APARECER SEMPRE) -->
+
             <div id="my-recruitment-status" class="max-w-3xl mx-auto"></div>
 
             <div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto transition-all"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-inner"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight tracking-tighter">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed font-medium">Neste momento não estamos a aceitar candidaturas. Tenta mais tarde!</p></div>
 
             <div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center">
-                
+
                 <h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2>
+
                 <form id="form-recruitment" onsubmit="event.preventDefault(); window.requestRecruitmentReview();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Discord*:</label><input type="text" id="rec-discord" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Tempo de Jogo (h)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Simple Voice?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sim">Sim</option><option value="Não">Não</option></select></div>
+
                     <div class="col-span-full"><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">PC ou Mobile?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div>
+
                     <div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+
                     <div><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl"></div>
+
                     <div class="col-span-full"><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Horários:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl h-16"></textarea></div>
+
                     <button type="submit" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] transition-all uppercase tracking-widest leading-tight">Enviar Formulário</button>
-                    
+
                     <div class="col-span-full mt-6 p-4 bg-pink-50 border border-pink-100 rounded-2xl text-sm text-slate-600 font-medium flex flex-col md:flex-row items-center justify-center gap-3 leading-tight shadow-sm">
+
                         <i data-lucide="info" class="w-6 h-6 text-pink-500 flex-shrink-0"></i>
-                        <p><strong>Observação:</strong> Quem for aprovado receberá o link do nosso servidor do Discord no privado <strong>OU</strong> receberá um pedido de amizade da <span class="text-pink-600 font-bold bg-pink-100 px-2 py-0.5 rounded-lg">@luhsch</span>.</p>
+
+                        <p><strong>Observação:</strong> Quem for aprovado receberá o link do nosso servidor do Discord no privado ou pedido de amizade da <span class="text-pink-600 font-bold bg-pink-100 px-2 py-0.5 rounded-lg">@luhsch</span>.</p>
+
                     </div>
+
                 </form>
+
             </div>
+
         </div>
+
     </main>
+
+
 
     <footer class="py-10 text-center text-pink-400 text-sm uppercase tracking-tighter font-semibold">Clã AFK fundado em 2025 por Luhnny</footer>
 
-    <!-- MODAL DE LOGIN / REGISTRO -->
+
+
+    <!-- MODAL DE LOGIN -->
+
     <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden text-center">
-            
+
+        <div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl relative overflow-hidden text-center">
+
             <div class="flex border-b mb-6">
+
                 <button id="tab-mode-login" onclick="window.toggleAuthMode('login')" class="flex-1 py-4 text-base font-bold text-pink-600 border-b-2 border-pink-600 uppercase tracking-tighter transition-all">Entrar</button>
+
                 <button id="tab-mode-register" onclick="window.toggleAuthMode('register')" class="flex-1 py-4 text-base font-bold text-slate-400 uppercase tracking-tighter transition-all">Criar Conta</button>
+
             </div>
 
-            <!-- LOGIN -->
             <div id="auth-login-form" class="space-y-4 text-left">
+
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
+
                 <input type="text" id="login-user" onkeydown="window.handleKeyNav(event, 'login-pass', null, null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Sua Senha:</label>
+
                 <input type="password" id="login-pass" onkeydown="window.handleKeyNav(event, null, 'login-user', window.handleLogin)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+
                 <button onclick="window.handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Acessar</button>
+
             </div>
 
-            <!-- REGISTRO -->
             <div id="auth-register-form" class="hidden space-y-4 text-left">
+
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label>
+
                 <input type="text" id="reg-nick" onkeydown="window.handleKeyNav(event, 'reg-pass', null, null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
-                
+
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Crie uma Senha:</label>
+
                 <input type="password" id="reg-pass" onkeydown="window.handleKeyNav(event, 'reg-type', 'reg-nick', null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
 
                 <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Tipo de Conta:</label>
+
                 <select id="reg-type" onchange="window.toggleRegisterType()" onkeydown="window.handleKeyNav(event, 'reg-clan', 'reg-pass', null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300">
+
                     <option value="member">Membro do Clã</option>
+
                     <option value="ally">Aliado</option>
+
                 </select>
 
                 <div id="reg-clan-div" class="hidden">
+
                     <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Selecione seu Clã:</label>
+
                     <select id="reg-clan" onkeydown="window.handleKeyNav(event, 'reg-invite', 'reg-type', null)" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"></select>
+
                 </div>
 
                 <label id="reg-invite-label" class="block text-sm font-bold text-pink-500 uppercase mb-1 ml-2">Código de Acesso:</label>
+
                 <input type="password" id="reg-invite" onkeydown="window.handleKeyNav(event, null, 'reg-clan', window.handleRegister)" class="w-full bg-pink-50 border-2 border-pink-200 p-3 rounded-xl outline-none focus:border-pink-400 text-pink-600 font-bold placeholder-pink-300" placeholder="Digite o código...">
 
                 <button onclick="window.handleRegister()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Registrar</button>
+
             </div>
 
             <button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-6 uppercase font-semibold text-center hover:text-pink-400 transition-colors">Fechar janela</button>
+
         </div>
+
     </div>
+
+
+
+    <!-- MODAL NOVA MISSÃO ATUALIZADO -->
+
+    <div id="modal-create-mission" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Missão</h3>
+
+            <form id="form-create-mission" onsubmit="event.preventDefault(); window.createMission();" class="space-y-4">
+
+                <div>
+
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Tag da Missão:</label>
+
+                    <select id="mis-tag" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
+                        <option value="">Selecione uma tag</option>
+
+                        <option value="Farm">Farm</option>
+
+                        <option value="Build">Build</option>
+
+                        <option value="Recursos">Recursos</option>
+
+                        <option value="Exploração">Exploração</option>
+
+                    </select>
+
+                </div>
+
+                <div>
+
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Objetivo:</label>
+
+                    <input type="text" id="mis-objective" placeholder="Ex: Farmar 10k cenouras" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
+                </div>
+
+                <div>
+
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Recompensa:</label>
+
+                    <input type="text" id="mis-reward" placeholder="Ex: 100k coins" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
+                </div>
+
+                <button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Criar Missão</button>
+
+                <button type="button" onclick="window.closeModal('modal-create-mission')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
 
     <!-- Modal Admin Evento -->
+
     <div id="modal-admin-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+
             <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase">Configurar Evento</h3>
+
             <form id="modal-admin-event-form" onsubmit="event.preventDefault(); window.publishClanEvent();">
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                     <input type="text" id="ev-title" placeholder="Título*" required class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
                     <input type="text" id="ev-theme" placeholder="Tema*" required class="p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
                     <input type="date" id="ev-date" required class="p-3 bg-slate-50 border rounded-xl">
+
                     <input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl">
+
                     <input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl">
+
                     <div class="md:col-span-2 space-y-2">
+
                         <label class="text-[10px] font-bold text-pink-400 uppercase">Prêmios:</label>
+
                         <input type="text" id="ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm">
+
                         <input type="text" id="ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm">
+
                         <input type="text" id="ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm">
+
                     </div>
+
                 </div>
+
                 <textarea id="ev-rules" placeholder="Regras e Descrição..." required class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 focus:border-pink-300 outline-none"></textarea>
+
                 <div class="flex gap-4">
+
                     <button type="submit" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg uppercase">Salvar Evento</button>
+
                     <button type="button" onclick="window.closeModal('modal-admin-event')" class="px-4 text-slate-400 text-xs font-bold uppercase">Voltar</button>
+
                 </div>
+
             </form>
+
         </div>
+
     </div>
+
     
+
     <!-- Modal Admin Evento do Clã -->
+
     <div id="modal-clan-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border-4 border-purple-100">
+
             <h3 class="text-2xl font-bold text-purple-600 mb-6 uppercase">Evento do Clã</h3>
+
             <form id="modal-clan-event-form" onsubmit="event.preventDefault(); window.publishClanEventData();">
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
                     <input type="text" id="clan-ev-title" placeholder="Título*" required class="p-3 bg-slate-50 border rounded-xl focus:border-purple-300 outline-none">
+
                     <input type="text" id="clan-ev-theme" placeholder="Tema*" required class="p-3 bg-slate-50 border rounded-xl focus:border-purple-300 outline-none">
+
                     <input type="date" id="clan-ev-date" required class="p-3 bg-slate-50 border rounded-xl">
+
                     <input type="time" id="clan-ev-time" class="p-3 bg-slate-50 border rounded-xl">
+
                     <input type="text" id="clan-ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl">
+
                     <div class="md:col-span-2 space-y-2">
+
                         <label class="text-[10px] font-bold text-purple-400 uppercase">Prêmios:</label>
+
                         <input type="text" id="clan-ev-p1" placeholder="🥇 1º Lugar" class="w-full p-2 border rounded-lg text-sm">
+
                         <input type="text" id="clan-ev-p2" placeholder="🥈 2º Lugar" class="w-full p-2 border rounded-lg text-sm">
+
                         <input type="text" id="clan-ev-p3" placeholder="🥉 3º Lugar" class="w-full p-2 border rounded-lg text-sm">
+
                     </div>
+
                 </div>
+
                 <textarea id="clan-ev-rules" placeholder="Regras e Descrição..." required class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 focus:border-purple-300 outline-none"></textarea>
+
                 <div class="flex gap-4">
+
                     <button type="submit" class="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-xl shadow-lg uppercase transition">Salvar Evento</button>
+
                     <button type="button" onclick="window.closeModal('modal-clan-event')" class="px-4 text-slate-400 text-xs font-bold uppercase">Voltar</button>
+
                 </div>
+
             </form>
+
         </div>
+
     </div>
+
+
 
     <!-- Modal Admin Aliança -->
+
     <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+
             <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Aliança</h3>
+
             <div class="space-y-4">
+
                 <input type="text" id="ali-name" placeholder="Nome do Clã" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
+
                 <input type="text" id="ali-tag" placeholder="Sigla" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none leading-tight transition-all">
+
                 <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase font-bold tracking-wider leading-tight tracking-tighter">Solicitar / Adicionar</button>
+
                 <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center tracking-tighter leading-tight hover:text-pink-400 transition-colors">Cancelar</button>
+
             </div>
+
         </div>
+
     </div>
 
-    <!-- Modal Criar Missão -->
-    <div id="modal-create-mission" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Missão</h3>
-            <form id="form-create-mission" onsubmit="event.preventDefault(); window.createMission();" class="space-y-4">
-                <div>
-                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Objetivo:</label>
-                    <input type="text" id="mis-objective" placeholder="Ex: Farmar 10k cenouras" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Recompensa:</label>
-                    <input type="text" id="mis-reward" placeholder="Ex: 100k coins" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
-                </div>
-                <button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Criar Missão</button>
-                <button type="button" onclick="window.closeModal('modal-create-mission')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
-            </form>
-        </div>
-    </div>
+
 
     <!-- Modal Criar Sorteio -->
+
     <div id="modal-create-giveaway" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+
             <h3 id="modal-title-giveaway" class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Novo Sorteio</h3>
+
             <form id="form-create-giveaway" onsubmit="event.preventDefault(); window.saveGiveaway();" class="space-y-4">
+
                 <div>
+
                     <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Prêmio:</label>
+
                     <input type="text" id="giv-prize" placeholder="Ex: VIP no servidor" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
                 </div>
+
                 <div class="grid grid-cols-2 gap-4">
+
                     <div>
+
                         <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Dia:</label>
+
                         <input type="date" id="giv-date" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
                     </div>
+
                     <div>
+
                         <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Hora:</label>
+
                         <input type="time" id="giv-time" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+
                     </div>
+
                 </div>
+
                 <button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Salvar Sorteio</button>
+
                 <button type="button" onclick="window.closeModal('modal-create-giveaway')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
+
             </form>
+
         </div>
+
     </div>
+
+
 
     <!-- Modal Ver Participantes Sorteio -->
+
     <div id="modal-view-participants" class="hidden fixed inset-0 z-[1150] flex items-center justify-center p-4 modal-bg text-left">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
+
             <div class="flex justify-between items-center mb-6">
+
                 <h3 class="text-xl font-bold text-slate-700 uppercase tracking-tighter">Participantes</h3>
+
                 <span id="participants-total-count" class="bg-pink-100 text-pink-600 text-xs font-bold px-3 py-1 rounded-full">0</span>
+
             </div>
-            <div id="participants-list-content" class="flex-grow overflow-y-auto space-y-2 pr-2">
-                <!-- Lista injetada via JS -->
-            </div>
+
+            <div id="participants-list-content" class="flex-grow overflow-y-auto space-y-2 pr-2"></div>
+
             <button onclick="window.closeModal('modal-view-participants')" class="mt-6 w-full bg-slate-100 text-slate-500 font-bold py-3 rounded-xl hover:bg-slate-200 transition uppercase text-sm">Fechar</button>
+
         </div>
+
     </div>
+
+
 
     <!-- Modais de Confirmação -->
+
     <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+
             <h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Evento?</h3>
+
             <div class="flex gap-4">
+
                 <button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button>
+
                 <button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button>
+
             </div>
+
         </div>
+
     </div>
 
+
+
     <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl">
+
             <h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Pedido?</h3>
+
             <div class="flex gap-4">
+
                 <button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button>
+
                 <button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button>
+
             </div>
+
         </div>
+
     </div>
+
+
 
     <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
+
+
     <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+
 
     <div id="modal-confirm-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
+
+
     <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all">
+
             <h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3>
+
             <p class="text-sm text-slate-500 mb-6">Esta ação removerá o membro da lista visível.</p>
+
             <div class="flex gap-4">
+
                 <button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button>
+
                 <button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button>
+
             </div>
+
         </div>
+
     </div>
+
+
 
     <!-- Modal Revisão de Recrutamento -->
+
     <div id="modal-review-recruitment" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all border-4 border-pink-100">
+
             <div class="mb-4 text-pink-500 flex justify-center"><i data-lucide="alert-triangle" class="w-12 h-12"></i></div>
+
             <h3 class="text-xl font-extrabold mb-2 text-slate-800 uppercase tracking-tighter leading-tight">Muita Atenção!</h3>
+
             <p class="text-sm text-slate-600 mb-6 leading-relaxed">Você revisou todos os campos? <br><strong>Não será possível editar</strong> as informações após o envio.</p>
+
             <div class="flex flex-col gap-3">
+
                 <button onclick="window.confirmRecruitmentSubmission()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase tracking-wider">Sim, Enviar Agora</button>
+
                 <button onclick="window.closeModal('modal-review-recruitment')" class="w-full bg-white border-2 border-slate-200 text-slate-500 font-bold py-3 rounded-xl transition leading-tight hover:border-pink-300 hover:text-pink-500 uppercase">Vou Revisar</button>
+
             </div>
+
         </div>
+
     </div>
 
-    <!-- Modal Editar Membro (Luhnny) -->
+
+
+    <!-- Modal Editar Membro -->
+
     <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left">
+
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all">
+
             <h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3>
-            
+
             <div class="space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label>
-                    <input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label>
-                    <input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula):</label>
-                    <input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300" placeholder="Ex: cpvp, builder, farm">
-                    <p class="text-[10px] text-slate-400 mt-1">Tags comuns: cpvp, spvp, builder, farm, pvp, eventos</p>
-                </div>
+
+                <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label><input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
+
+                <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label><input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div>
+
+                <div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula):</label><input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300" placeholder="Ex: cpvp, builder, farm"><p class="text-[10px] text-slate-400 mt-1">Tags comuns: cpvp, spvp, builder, farm, pvp, eventos</p></div>
+
             </div>
 
             <div class="flex gap-4 mt-8">
+
                 <button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase">Salvar</button>
+
                 <button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500 uppercase">Cancelar</button>
+
             </div>
+
         </div>
+
     </div>
 
+
+
 </body>
+
 </html>
