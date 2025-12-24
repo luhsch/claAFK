@@ -626,11 +626,39 @@
             document.getElementById(prefix + 'time').value = g.time;
         };
 
+        window.removeEventParticipant = async (id, nick, isClan) => {
+            if (currentUser?.name !== "Luhnny") return;
+            const list = isClan ? allClanEvents : allEvents;
+            const coll = isClan ? 'clan_events' : 'events';
+            const ev = list.find(e => e.id === id);
+            if (ev && ev.participants) {
+                const next = ev.participants.filter(p => p !== nick);
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: next });
+                window.notify(`Removido(a): ${nick}`, "info");
+            }
+        };
+
+        window.removeGiveawayParticipant = async (id, nick, isClan) => {
+            if (currentUser?.name !== "Luhnny") return;
+            const list = isClan ? allClanGiveaways : allGiveaways;
+            const coll = isClan ? 'clan_giveaways' : 'giveaways';
+            const giv = list.find(g => g.id === id);
+            if (giv && giv.participants) {
+                const next = giv.participants.filter(p => p !== nick);
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: next });
+                window.notify(`Removido(a): ${nick}`, "info");
+                // Atualizar modal
+                setTimeout(() => window.viewParticipants(id, isClan), 200);
+            }
+        };
+
         window.viewParticipants = (id, isClan = false) => {
             const list = isClan ? allClanGiveaways : allGiveaways;
             const g = list.find(x => x.id === id);
             const listContainer = document.getElementById('participants-list-content');
             const totalEl = document.getElementById('participants-total-count');
+            const isLuhnny = currentUser && currentUser.name === "Luhnny";
+
             listContainer.innerHTML = '';
             if (g && g.participants && g.participants.length > 0) {
                 totalEl.innerText = `${g.participants.length} Participantes`;
@@ -639,6 +667,7 @@
                         <div class="flex items-center gap-3 p-3 bg-pink-50 rounded-xl border border-pink-100">
                             <img src="https://ui-avatars.com/api/?name=${p}&background=fbcfe8&color=db2777" class="w-8 h-8 rounded-full">
                             <span class="font-bold text-slate-700">${p}</span>
+                            ${isLuhnny ? `<button onclick="window.removeGiveawayParticipant('${g.id}', '${p}', ${isClan})" class="ml-auto p-1.5 text-red-300 hover:text-red-500 transition"><i data-lucide="user-x" class="w-4 h-4"></i></button>` : ''}
                         </div>`;
                 });
             } else {
@@ -646,6 +675,7 @@
                 listContainer.innerHTML = '<div class="col-span-full text-center text-slate-400 italic py-4">Ninguém participando ainda.</div>';
             }
             window.openModal('modal-view-participants');
+            lucide.createIcons();
         };
 
         window.joinGiveaway = async (id, isClan = false) => {
@@ -739,11 +769,26 @@
 
         window.createEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
+            const isLuhnny = currentUser && currentUser.name === "Luhnny";
+            const isClan = (type === 'active' || type === 'suggestion' || type === 'history') && ev.theme; // Heurística simples para detectar clan_events
             let controls = '';
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const pCount = (ev.participants || []).length;
             const creditText = (ev.suggestedBy && !ALL_ADMINS.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
-            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+            
+            const pList = `
+                <div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2">
+                    <span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span>
+                    <div class="flex flex-wrap gap-2">
+                        ${pCount > 0 ? ev.participants.map(p => `
+                            <span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">
+                                ${p}
+                                ${isLuhnny ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${false})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}
+                            </span>
+                        `).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}
+                    </div>
+                </div>`;
+
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
             if (isEventAdmin) {
                 if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.requestDeleteEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
@@ -769,11 +814,25 @@
 
         window.createClanEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
+            const isLuhnny = currentUser && currentUser.name === "Luhnny";
             let controls = ''; 
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const pCount = (ev.participants || []).length;
             const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
-            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+            
+            const pList = `
+                <div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2">
+                    <span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span>
+                    <div class="flex flex-wrap gap-2">
+                        ${pCount > 0 ? ev.participants.map(p => `
+                            <span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">
+                                ${p}
+                                ${isLuhnny ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${true})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}
+                            </span>
+                        `).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}
+                    </div>
+                </div>`;
+
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
             
             if (isEventAdmin) {
@@ -950,7 +1009,7 @@
                 }
                 if (canManageMissions) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
                 if (isEventAdmin) { aEventBtn?.classList.remove('hidden'); aGiveawayBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); aClanEventPanelBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden'); }
-                if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); }
+                if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); aMissionBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); }
             } else {
                 lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden');
                 btnRecNav?.classList.remove('hidden'); 
