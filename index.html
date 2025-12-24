@@ -93,7 +93,7 @@
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "iaruchy", "1gcy", "Pardas01", 
             "baiano019", "Raitzz_", "Invisivel", "NeverPuzzle", "chorapropai", 
-            "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14", "zKingPrime", "PyromaniacVV"
+            "felpipoca", "1aswd", "ynSunn", "labubusista", "TheP1nk", "2aswd", "_Vzkls14", "zKingPrime", "PyromaniacVV", "festinha"
         ];
 
         const STATIC_MEMBERS = [
@@ -116,7 +116,8 @@
             { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
             { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" },
             { nick: "zKingPrime", tags: ["spvp", "cpvp"], aniv: "09/10", disp: "Toda hora", img: "zkingprime.png" },
-            { nick: "PyromaniacVV", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "pyromaniacvv.png" }
+            { nick: "PyromaniacVV", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "pyromaniacvv.png" },
+            { nick: "festinha", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "festinha.png" }
         ];
 
         const notifAudio = new Audio("https://assets.mixkit.co/active_storage/sfx/234/234-preview.mp3"); 
@@ -328,6 +329,7 @@
                         ...baseData,
                         aniv: override.aniv || baseData.aniv,
                         disp: override.disp || baseData.disp,
+                        img: override.img || baseData.img,
                         tags: override.tags ? override.tags : baseData.tags
                     };
                 }
@@ -421,6 +423,7 @@
             document.getElementById('edit-mem-aniv').value = member.aniv;
             document.getElementById('edit-mem-disp').value = member.disp;
             document.getElementById('edit-mem-tags').value = (member.tags || []).join(', ');
+            document.getElementById('edit-mem-img-input').value = ""; // Reset file input
             window.openModal('modal-edit-member');
         };
 
@@ -430,9 +433,31 @@
             const disp = document.getElementById('edit-mem-disp').value.trim();
             const tagsStr = document.getElementById('edit-mem-tags').value.trim();
             const tags = tagsStr.split(',').map(t => t.trim()).filter(t => t.length > 0);
+            
+            const fileInput = document.getElementById('edit-mem-img-input');
+            let imgBase64 = null;
+
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+                if (file.size > 800000) return window.notify("Imagem muito pesada! Máximo 800KB.", "error");
+                
+                imgBase64 = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target.result);
+                    reader.readAsDataURL(file);
+                });
+            }
+
             const updateData = { aniv, disp, tags };
+            if (imgBase64) updateData.img = imgBase64;
+
             try {
-                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'member_details', editingMemberNick.toLowerCase()), updateData);
+                // Manter dados antigos se não alterados
+                const currentRef = doc(db, 'artifacts', appId, 'public', 'data', 'member_details', editingMemberNick.toLowerCase());
+                const currentSnap = await getDoc(currentRef);
+                const finalData = currentSnap.exists() ? { ...currentSnap.data(), ...updateData } : updateData;
+
+                await setDoc(currentRef, finalData);
                 window.notify(`Dados de ${editingMemberNick} atualizados!`, "success", false);
                 window.closeModal('modal-edit-member');
             } catch (e) {
@@ -843,7 +868,7 @@
         };
 
         window.renderClanEvents = function() {
-            const actC = document.getElementById('clan-active-events-list'); const histC = document.getElementById('clan-history-events-list'); const suggC = document.getElementById('clan-suggested-events-list'); const suggS = document.getElementById('clan-suggestions-section');
+            const actC = document.getElementById('clan-active-events-list'); const histC = document.getElementById('clan-history-events-list'); const suggC = document.getElementById('clan-suggested-events-list'); const suggS = document.getElementById('suggestions-section');
             if(!actC) return; actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
             const actives = allClanEvents.filter(e => e.status === 'active'); const history = allClanEvents.filter(e => e.status === 'ended'); const suggestions = allClanEvents.filter(e => e.status === 'suggestion');
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
@@ -1302,7 +1327,7 @@
 
     <!-- MODAL NOVA MISSÃO -->
     <div id="modal-create-mission" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+        <div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl">
             <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Missão</h3>
             <form id="form-create-mission" onsubmit="event.preventDefault(); window.createMission();" class="space-y-4">
                 <div>
@@ -1379,6 +1404,25 @@
         </div>
     </div>
 
+    <!-- MODAL ADICIONAR ALIANÇA -->
+    <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter">Nova Aliança</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nome do Clã:</label>
+                    <input type="text" id="ali-name" placeholder="Ex: Tenebris" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">TAG do Clã:</label>
+                    <input type="text" id="ali-tag" placeholder="Ex: TNB" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Confirmar Aliança</button>
+                <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL VER PARTICIPANTES SORTEIO -->
     <div id="modal-view-participants" class="hidden fixed inset-0 z-[1150] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
@@ -1444,25 +1488,6 @@
             </form>
         </div>
     </div>
-
-    <!-- MODAL ADICIONAR ALIANÇA -->
-    <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
-            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter">Nova Aliança</h3>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nome do Clã:</label>
-                    <input type="text" id="ali-name" placeholder="Ex: Tenebris" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">TAG do Clã:</label>
-                    <input type="text" id="ali-tag" placeholder="Ex: TNB" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
-                </div>
-                <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Confirmar Aliança</button>
-                <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
-            </div>
-        </div>
-    </div>
     
     <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
@@ -1474,7 +1499,9 @@
 
     <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
-    <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label><input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label><input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula):</label><input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div></div><div class="flex gap-4 mt-8"><button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase">Salvar</button><button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500 uppercase">Cancelar</button></div></div></div>
+    <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3><div class="flex gap-4"><button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+    <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label><input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label><input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula):</label><input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Alterar Foto de Perfil:</label><input type="file" id="edit-mem-img-input" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100 cursor-pointer"></div></div><div class="flex gap-4 mt-8"><button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase">Salvar</button><button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500 uppercase">Cancelar</button></div></div></div>
 
 </body>
 </html>
