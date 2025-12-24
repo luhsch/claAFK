@@ -19,6 +19,7 @@
         .recruitment-badge { animation: subtle-pulse 3s infinite ease-in-out; }
         .btn-attention { animation: attention-pulse 2s infinite; }
         .modal-bg { background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+        .subtab-active { background-color: #db2777; color: white; }
     </style>
 
     <!-- Firebase SDK -->
@@ -50,6 +51,7 @@
         let allIdentities = [];
         let allMissions = [];
         let allGiveaways = []; 
+        let allClanGiveaways = []; 
         let hiddenStaticMembers = []; 
         let memberDetailsOverrides = {}; 
         let isRecruitmentOpen = true; 
@@ -57,6 +59,7 @@
         let initialEventLoad = true;
         let initialClanEventLoad = true;
         let initialGiveawayLoad = true;
+        let initialClanGiveawayLoad = true;
         let initialRecruitmentLoad = true;
         let initialRecruitmentListLoad = true; 
         
@@ -69,9 +72,11 @@
         let applicationToDeleteStatus = null; 
         let missionToDeleteId = null;
         let giveawayToDeleteId = null;
+        let clanGiveawayToDeleteId = null;
         let memberToDelete = null; 
         
         let editingGiveawayId = null; 
+        let editingClanGiveawayId = null;
         let editingMemberNick = null; 
 
         let editingEventAuthor = null;
@@ -283,12 +288,24 @@
         };
 
         window.switchTab = (tab) => {
-            ['apresentacao', 'membros', 'eventos', 'clan-events', 'aliancas', 'recrutamento', 'contas', 'missoes', 'sorteios'].forEach(t => {
+            ['apresentacao', 'membros', 'area-cla', 'eventos', 'sorteios', 'aliancas', 'recrutamento', 'contas'].forEach(t => {
                 const el = document.getElementById('tab-' + t);
                 const btn = document.getElementById('btn-' + t);
                 if (!el || !btn) return;
                 if (t === tab) { el.classList.remove('hidden'); btn.classList.add('tab-active'); btn.classList.remove('text-pink-300'); } 
                 else { el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('text-pink-300'); }
+            });
+            if(tab === 'area-cla') window.switchSubTab('eventos-cla');
+            lucide.createIcons();
+        };
+
+        window.switchSubTab = (sub) => {
+            const tabs = ['eventos-cla', 'sorteios-cla', 'missoes-cla'];
+            tabs.forEach(t => {
+                const el = document.getElementById('subtab-' + t);
+                const btn = document.getElementById('subbtn-' + t);
+                if (t === sub) { el.classList.remove('hidden'); btn.classList.add('subtab-active'); }
+                else { el.classList.add('hidden'); btn.classList.remove('subtab-active'); }
             });
             lucide.createIcons();
         };
@@ -467,6 +484,10 @@
 
         window.takeMission = async (id) => {
             if (!currentUser) return;
+            // Verificar limite de 2 missões
+            const myMissions = allMissions.filter(m => m.takenBy === currentUser.name && m.status === 'taken');
+            if (myMissions.length >= 2) return window.notify("Você já possui 2 missões em andamento!", "error", false);
+            
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', id), {
                 status: 'taken',
                 takenBy: currentUser.name
@@ -530,51 +551,77 @@
             lucide.createIcons();
         };
 
-        window.saveGiveaway = async () => {
-            const prize = document.getElementById('giv-prize').value.trim();
-            const date = document.getElementById('giv-date').value;
-            const time = document.getElementById('giv-time').value;
+        window.saveGiveaway = async (isClan = false) => {
+            const prefix = isClan ? 'clan-giv-' : 'giv-';
+            const prize = document.getElementById(prefix + 'prize').value.trim();
+            const date = document.getElementById(prefix + 'date').value;
+            const time = document.getElementById(prefix + 'time').value;
             if (!prize || !date || !time) return window.notify("Preencha todos os campos do sorteio.", "error", false);
             const data = { prize, date, time };
-            if (editingGiveawayId) {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', editingGiveawayId), data);
+            const coll = isClan ? 'clan_giveaways' : 'giveaways';
+            const editId = isClan ? editingClanGiveawayId : editingGiveawayId;
+            const isAdmin = ALL_ADMINS.includes(currentUser.name);
+
+            if (editId) {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, editId), data);
                 window.notify("Sorteio Atualizado!", "success", false);
             } else {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', coll), {
                     ...data,
                     participants: [],
                     winner: null,
-                    status: 'open',
+                    status: isClan ? (isAdmin ? 'open' : 'suggestion') : 'open',
                     createdBy: currentUser.name,
                     createdAt: Date.now()
                 });
-                window.notify("Sorteio Criado!", "success", false);
+                window.notify(isClan && !isAdmin ? "Sugestão de sorteio enviada!" : "Sorteio Criado!", "success", false);
             }
-            window.closeModal('modal-create-giveaway');
-            document.getElementById('form-create-giveaway').reset();
-            editingGiveawayId = null;
+            window.closeModal(isClan ? 'modal-create-clan-giveaway' : 'modal-create-giveaway');
+            document.getElementById(isClan ? 'form-create-clan-giveaway' : 'form-create-giveaway').reset();
+            if(isClan) editingClanGiveawayId = null; else editingGiveawayId = null;
         };
 
-        window.openCreateGiveawayModal = () => {
-            editingGiveawayId = null;
-            document.getElementById('form-create-giveaway').reset();
-            document.getElementById('modal-title-giveaway').innerText = "Novo Sorteio";
-            window.openModal('modal-create-giveaway');
+        window.approveClanGiveaway = async (id) => {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_giveaways', id), { status: 'open' });
+            window.notify("Sorteio do clã aprovado!", "success", false);
         };
 
-        window.editGiveaway = (id) => {
-            const g = allGiveaways.find(x => x.id === id);
+        window.openCreateGiveawayModal = (isClan = false) => {
+            if(isClan) {
+                editingClanGiveawayId = null;
+                document.getElementById('form-create-clan-giveaway').reset();
+                document.getElementById('modal-title-clan-giveaway').innerText = "Novo Sorteio do Clã";
+                window.openModal('modal-create-clan-giveaway');
+            } else {
+                editingGiveawayId = null;
+                document.getElementById('form-create-giveaway').reset();
+                document.getElementById('modal-title-giveaway').innerText = "Novo Sorteio";
+                window.openModal('modal-create-giveaway');
+            }
+        };
+
+        window.editGiveaway = (id, isClan = false) => {
+            const list = isClan ? allClanGiveaways : allGiveaways;
+            const prefix = isClan ? 'clan-giv-' : 'giv-';
+            const g = list.find(x => x.id === id);
             if (!g) return;
-            editingGiveawayId = id;
-            document.getElementById('giv-prize').value = g.prize;
-            document.getElementById('giv-date').value = g.date;
-            document.getElementById('giv-time').value = g.time;
-            document.getElementById('modal-title-giveaway').innerText = "Editar Sorteio";
-            window.openModal('modal-create-giveaway');
+            if(isClan) {
+                editingClanGiveawayId = id;
+                document.getElementById('modal-title-clan-giveaway').innerText = "Editar Sorteio do Clã";
+                window.openModal('modal-create-clan-giveaway');
+            } else {
+                editingGiveawayId = id;
+                document.getElementById('modal-title-giveaway').innerText = "Editar Sorteio";
+                window.openModal('modal-create-giveaway');
+            }
+            document.getElementById(prefix + 'prize').value = g.prize;
+            document.getElementById(prefix + 'date').value = g.date;
+            document.getElementById(prefix + 'time').value = g.time;
         };
 
-        window.viewParticipants = (id) => {
-            const g = allGiveaways.find(x => x.id === id);
+        window.viewParticipants = (id, isClan = false) => {
+            const list = isClan ? allClanGiveaways : allGiveaways;
+            const g = list.find(x => x.id === id);
             const listContainer = document.getElementById('participants-list-content');
             const totalEl = document.getElementById('participants-total-count');
             listContainer.innerHTML = '';
@@ -594,20 +641,24 @@
             window.openModal('modal-view-participants');
         };
 
-        window.joinGiveaway = async (id) => {
+        window.joinGiveaway = async (id, isClan = false) => {
             if (!currentUser) return;
-            const giv = allGiveaways.find(g => g.id === id);
+            const list = isClan ? allClanGiveaways : allGiveaways;
+            const coll = isClan ? 'clan_giveaways' : 'giveaways';
+            const giv = list.find(g => g.id === id);
             if (!giv) return;
             const currentParts = giv.participants || [];
             if (currentParts.includes(currentUser.name)) return window.notify("Você já está participando!", "info", false);
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), {
                 participants: [...currentParts, currentUser.name]
             });
             window.notify("Participação confirmada!", "success", false);
         };
 
-        window.runGiveawayDraw = async (id) => {
-            const giv = allGiveaways.find(g => g.id === id);
+        window.runGiveawayDraw = async (id, isClan = false) => {
+            const list = isClan ? allClanGiveaways : allGiveaways;
+            const coll = isClan ? 'clan_giveaways' : 'giveaways';
+            const giv = list.find(g => g.id === id);
             if (!giv) return;
             const isAuthorized = currentUser && (currentUser.name === "Luhnny" || currentUser.name === giv.createdBy);
             if (!isAuthorized) return window.notify("Apenas a Luhnny ou o criador podem realizar o sorteio.", "error", false);
@@ -616,42 +667,65 @@
             window.crypto.getRandomValues(randomBuffer);
             const winnerIndex = randomBuffer[0] % giv.participants.length;
             const winner = giv.participants[winnerIndex];
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', id), { winner: winner, status: 'closed' });
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { winner: winner, status: 'closed' });
         };
 
-        window.requestDeleteGiveaway = (id) => { giveawayToDeleteId = id; window.openModal('modal-confirm-giveaway-delete'); };
-        window.confirmGiveawayDelete = async () => {
-            if (giveawayToDeleteId) {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'giveaways', giveawayToDeleteId));
-                window.closeModal('modal-confirm-giveaway-delete');
+        window.requestDeleteGiveaway = (id, isClan = false) => { 
+            if(isClan) clanGiveawayToDeleteId = id; else giveawayToDeleteId = id; 
+            window.openModal(isClan ? 'modal-confirm-clan-giveaway-delete' : 'modal-confirm-giveaway-delete'); 
+        };
+        
+        window.confirmGiveawayDelete = async (isClan = false) => {
+            const id = isClan ? clanGiveawayToDeleteId : giveawayToDeleteId;
+            const coll = isClan ? 'clan_giveaways' : 'giveaways';
+            if (id) {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id));
+                window.closeModal(isClan ? 'modal-confirm-clan-giveaway-delete' : 'modal-confirm-giveaway-delete');
                 window.notify("Sorteio removido.", "success", false);
             }
         };
 
-        window.renderGiveaways = function() {
-            const list = document.getElementById('giveaways-list'); if(!list) return;
+        window.renderGiveaways = function(isClan = false) {
+            const listId = isClan ? 'clan-giveaways-list' : 'giveaways-list';
+            const list = document.getElementById(listId); if(!list) return;
             list.innerHTML = '';
+            const dataList = isClan ? allClanGiveaways : allGiveaways;
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            if (allGiveaways.length === 0) {
-                list.innerHTML = '<div class="col-span-full text-center p-12 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400 font-medium">Nenhum sorteio ativo no momento. Fique atento!</div>';
+            
+            // Filtrar sugestões se não for admin
+            const visibleList = isClan && !isEventAdmin 
+                ? dataList.filter(g => g.status !== 'suggestion' || g.createdBy === currentUser?.name)
+                : dataList;
+
+            if (visibleList.length === 0) {
+                list.innerHTML = `<div class="col-span-full text-center p-12 bg-white rounded-3xl border-2 border-dashed border-${isClan ? 'purple' : 'pink'}-200 text-slate-400 font-medium">Nenhum sorteio ${isClan ? 'do clã ' : ''}ativo no momento. Fique atento!</div>`;
                 return;
             }
-            allGiveaways.sort((a,b) => (a.status === 'open' ? -1 : 1) || b.createdAt - a.createdAt).forEach(g => {
+            visibleList.sort((a,b) => (a.status === 'open' ? -1 : 1) || b.createdAt - a.createdAt).forEach(g => {
                 const isParticipant = currentUser && (g.participants || []).includes(currentUser.name);
                 const hasWinner = g.winner !== null;
+                const isSuggestion = g.status === 'suggestion';
                 const pCount = (g.participants || []).length;
                 const isCreator = currentUser && (g.createdBy === currentUser.name || isLuhnny);
+                
                 let actionArea = '';
-                if (hasWinner) {
+                if (isSuggestion) {
+                    if (isEventAdmin) {
+                        actionArea = `<div class="mt-6"><button onclick="window.approveClanGiveaway('${g.id}')" class="w-full py-3 rounded-xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 transition uppercase text-xs">Aprovar Sorteio</button></div>`;
+                    } else {
+                        actionArea = `<div class="mt-6 p-3 bg-yellow-50 text-yellow-600 rounded-xl border border-yellow-100 text-center text-xs font-bold uppercase">Aguardando aprovação da Luhnny</div>`;
+                    }
+                } else if (hasWinner) {
                     actionArea = `<div class="mt-6 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-200 text-center"><p class="text-xs font-bold text-yellow-600 uppercase mb-1">O jogador que ganhou é:</p><p class="text-2xl font-extrabold text-slate-800 flex justify-center items-center gap-2"><i data-lucide="trophy" class="w-6 h-6 text-yellow-500"></i> ${g.winner}</p></div>`;
                 } else {
-                    let joinBtn = currentUser && !isParticipant ? `<button onclick="window.joinGiveaway('${g.id}')" class="w-full py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>` : currentUser && isParticipant ? `<div class="w-full py-3 rounded-xl bg-green-50 text-green-600 font-bold border border-green-200 text-center flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> Você está participando</div>` : `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
-                    let drawBtn = isCreator && pCount > 0 ? `<div class="mt-3 flex gap-2"><button onclick="window.runGiveawayDraw('${g.id}')" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button><button onclick="window.viewParticipants('${g.id}')" class="px-4 py-3 rounded-xl bg-pink-100 text-pink-600 font-bold shadow-sm hover:bg-pink-200 transition"><i data-lucide="eye"></i></button></div>` : isCreator && pCount === 0 ? `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>` : isEventAdmin ? `<button onclick="window.viewParticipants('${g.id}')" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>` : '';
+                    let joinBtn = currentUser && !isParticipant ? `<button onclick="window.joinGiveaway('${g.id}', ${isClan})" class="w-full py-3 rounded-xl ${isClan ? 'bg-purple-500 hover:bg-purple-600' : 'pink-gradient'} text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>` : currentUser && isParticipant ? `<div class="w-full py-3 rounded-xl bg-green-50 text-green-600 font-bold border border-green-200 text-center flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> Você está participando</div>` : `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
+                    let drawBtn = isCreator && pCount > 0 ? `<div class="mt-3 flex gap-2"><button onclick="window.runGiveawayDraw('${g.id}', ${isClan})" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button><button onclick="window.viewParticipants('${g.id}', ${isClan})" class="px-4 py-3 rounded-xl bg-${isClan ? 'purple' : 'pink'}-100 text-${isClan ? 'purple' : 'pink'}-600 font-bold shadow-sm hover:bg-${isClan ? 'purple' : 'pink'}-200 transition"><i data-lucide="eye"></i></button></div>` : isCreator && pCount === 0 ? `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>` : isEventAdmin ? `<button onclick="window.viewParticipants('${g.id}', ${isClan})" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>` : '';
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
                 }
-                let adminControls = isEventAdmin || isCreator ? `<div class="absolute top-4 right-4 flex gap-2"><button onclick="window.editGiveaway('${g.id}')" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="window.requestDeleteGiveaway('${g.id}')" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>` : '';
-                list.innerHTML += `<div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">${adminControls}<div><div class="flex items-center gap-2 mb-2 text-pink-500 font-bold text-xs uppercase tracking-wider"><i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}</div><h3 class="text-2xl font-extrabold text-slate-800 mb-1">${g.prize}</h3><p class="text-sm text-slate-500 font-medium">Sorteio organizado por ${g.createdBy}</p><div class="mt-4 flex items-center gap-2 text-sm text-slate-600 font-semibold bg-slate-50 p-2 rounded-lg inline-block"><i data-lucide="users" class="w-4 h-4 text-pink-400"></i> ${pCount} Participantes</div></div>${actionArea}</div>`;
+                
+                let adminControls = isEventAdmin || isCreator ? `<div class="absolute top-4 right-4 flex gap-2"><button onclick="window.editGiveaway('${g.id}', ${isClan})" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button><button onclick="window.requestDeleteGiveaway('${g.id}', ${isClan})" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>` : '';
+                list.innerHTML += `<div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : isSuggestion ? 'border-yellow-200 border-dashed' : isClan ? 'border-purple-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">${adminControls}<div><div class="flex items-center gap-2 mb-2 text-${isClan ? 'purple' : 'pink'}-500 font-bold text-xs uppercase tracking-wider"><i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}</div><h3 class="text-2xl font-extrabold text-slate-800 mb-1">${g.prize}</h3><p class="text-sm text-slate-500 font-medium">Sorteio organizado por ${g.createdBy}</p><div class="mt-4 flex items-center gap-2 text-sm text-slate-600 font-semibold bg-slate-50 p-2 rounded-lg inline-block"><i data-lucide="users" class="w-4 h-4 text-${isClan ? 'purple' : 'pink'}-400"></i> ${pCount} Participantes</div></div>${actionArea}</div>`;
             });
             lucide.createIcons();
         };
@@ -670,7 +744,7 @@
             } else if (currentUser && !currentUser.isAlly && (type === 'active' || type === 'history')) {
                 controls = pList;
             }
-            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
+            return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}</div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanParticipation('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
         };
 
         window.renderEvents = function() {
@@ -689,13 +763,13 @@
         window.createClanEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
             let controls = ''; 
-            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name); // MODIFICADO: Permitir que todos os administradores editem sugestões internas
+            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const pCount = (ev.participants || []).length;
             const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
             const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="bg-pink-50 border border-pink-100 px-4 py-1.5 rounded-xl text-pink-600 text-base font-bold shadow-sm">${p}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
             
-            if (isEventAdmin) { // MODIFICADO: De 'isLuhnny' para 'isEventAdmin' para permitir edição de outros admins
+            if (isEventAdmin) {
                 if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatusInternal('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.deleteClanEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
             } else { controls = pList; }
@@ -706,9 +780,9 @@
             const actC = document.getElementById('clan-active-events-list'); const histC = document.getElementById('clan-history-events-list'); const suggC = document.getElementById('clan-suggested-events-list'); const suggS = document.getElementById('clan-suggestions-section');
             if(!actC) return; actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
             const actives = allClanEvents.filter(e => e.status === 'active'); const history = allClanEvents.filter(e => e.status === 'ended'); const suggestions = allClanEvents.filter(e => e.status === 'suggestion');
-            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name); // MODIFICADO
+            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
 
-            if (isEventAdmin && suggestions.length > 0) { // MODIFICADO: Permitir visualização de sugestões para admins
+            if (isEventAdmin && suggestions.length > 0) {
                 suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createClanEventCard(ev, 'suggestion'));
             } else suggS?.classList.add('hidden');
             if (actives.length === 0) document.getElementById('clan-no-active-message')?.classList.remove('hidden');
@@ -732,7 +806,7 @@
         window.toggleClanEventJoin = async (id) => { const ev = allClanEvents.find(e => e.id === id); const p = ev.participants || []; const next = p.includes(currentUser.name) ? p.filter(x => x !== currentUser.name) : [...p, currentUser.name]; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { participants: next }); };
         window.deleteClanEvent = async (id) => { clanEventToDeleteId = id; await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id)); };
         
-        window.editClanEventInternal = (id) => { // MODIFICADO: Adicionada verificação de segurança
+        window.editClanEventInternal = (id) => {
             const ev = allClanEvents.find(e => e.id === id); 
             if(!ev) return;
             editingClanEventId = id; 
@@ -767,7 +841,7 @@
         window.requestDeleteEvent = (id) => { eventToDeleteId = id; window.openModal('modal-confirm-delete'); };
         window.confirmDelete = async () => { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId)); window.closeModal('modal-confirm-delete'); };
         
-        window.editClanEvent = (id) => { // MODIFICADO: Adicionada verificação de segurança
+        window.editClanEvent = (id) => {
             const ev = allEvents.find(e => e.id === id); 
             if(!ev) return;
             editingEventId = id; 
@@ -842,26 +916,41 @@
             const lBtn = document.getElementById('btn-login-trigger'); 
             const uDisp = document.getElementById('user-logged-in'); 
             const aEventBtn = document.getElementById('admin-event-panel'); 
-            const aMissionBtn = document.getElementById('btn-missoes'); 
             const aMissionAdmin = document.getElementById('admin-mission-controls'); 
             const aGiveawayBtn = document.getElementById('btn-admin-giveaway'); 
-            const aClanEventBtn = document.getElementById('btn-clan-event-panel'); 
+            const aClanAreaBtn = document.getElementById('btn-area-cla');
+            const aClanGivBtn = document.getElementById('btn-admin-clan-giveaway');
+            const aClanEventPanelBtn = document.getElementById('btn-clan-event-panel'); 
             const recToggle = document.getElementById('luhnny-recruitment-toggle'); 
             const recFormS = document.getElementById('recruitment-form-section'); 
             const recClosedM = document.getElementById('recruitment-closed-message');
+            const btnRecNav = document.getElementById('btn-recrutamento');
             
             if (currentUser) {
                 lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden'); document.getElementById('logged-name').innerText = currentUser.name;
-                if (isSuperAdmin) { aRecPanel?.classList.remove('hidden'); aAllyBtn?.classList.remove('hidden'); recToggle?.classList.remove('hidden'); recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO"; recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`; } else { aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); }
+                if (isSuperAdmin) { 
+                    aRecPanel?.classList.remove('hidden'); 
+                    aAllyBtn?.classList.remove('hidden'); 
+                    recToggle?.classList.remove('hidden'); 
+                    recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO"; 
+                    recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`; 
+                    btnRecNav?.classList.remove('hidden'); 
+                } else { 
+                    aRecPanel?.classList.add('hidden'); 
+                    aAllyBtn?.classList.add('hidden'); 
+                    recToggle?.classList.add('hidden'); 
+                    btnRecNav?.classList.add('hidden'); 
+                }
                 if (canManageMissions) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
-                if (isEventAdmin) { aEventBtn?.classList.remove('hidden'); aGiveawayBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); }
-                if (!currentUser.isAlly) { aClanEventBtn?.classList.remove('hidden'); aMissionBtn?.classList.remove('hidden'); } else { aClanEventBtn?.classList.add('hidden'); aMissionBtn?.classList.add('hidden'); }
+                if (isEventAdmin) { aEventBtn?.classList.remove('hidden'); aGiveawayBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); aClanEventPanelBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden'); }
+                if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); }
             } else {
-                lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aMissionBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanEventBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden');
+                lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden');
+                btnRecNav?.classList.remove('hidden'); 
             }
             if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); } else { recFormS?.classList.add('hidden'); recClosedM?.classList.remove('hidden'); }
             const hBadge = document.getElementById('header-rec-badge'); if (hBadge) { hBadge.innerHTML = isRecruitmentOpen ? '<i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto' : '<i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado'; hBadge.className = `bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 shadow-2xl flex items-center gap-2 ${isRecruitmentOpen ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`; }
-            window.renderAdminApplications(); window.renderMyRecruitmentStatus(); window.renderAlliances(); window.renderEvents(); window.renderClanEvents(); window.renderIdentities(); window.renderMissions(); window.renderGiveaways(); window.renderMembers(); lucide.createIcons();
+            window.renderAdminApplications(); window.renderMyRecruitmentStatus(); window.renderAlliances(); window.renderEvents(); window.renderClanEvents(); window.renderIdentities(); window.renderMissions(); window.renderGiveaways(); window.renderGiveaways(true); window.renderMembers(); lucide.createIcons();
         };
 
         onAuthStateChanged(auth, async (u) => {
@@ -889,6 +978,7 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'ally_identities'), (s) => { allIdentities = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderIdentities(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'member_details'), (s) => { memberDetailsOverrides = {}; s.docs.forEach(d => { memberDetailsOverrides[d.id] = d.data(); }); window.renderMembers(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => { if (!initialGiveawayLoad) { s.docChanges().forEach(change => { if (change.type === "added") window.notify("🎁 Novo Sorteio Rolando!", "success", true); if (change.type === "modified") { const data = change.doc.data(); if(data.winner && data.status === 'closed') window.notify(`🏆 Temos um vencedor no sorteio: ${data.winner}!`, "success", true); } }); } allGiveaways = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderGiveaways(); initialGiveawayLoad = false; });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'clan_giveaways'), (s) => { if (!initialClanGiveawayLoad) { s.docChanges().forEach(change => { if (change.type === "added") window.notify("🛡️ Novo Sorteio do Clã!", "success", true); if (change.type === "modified") { const data = change.doc.data(); if(data.winner && data.status === 'closed') window.notify(`🛡️ Temos um vencedor no sorteio do Clã: ${data.winner}!`, "success", true); } }); } allClanGiveaways = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderGiveaways(true); initialClanGiveawayLoad = false; });
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
             if (!saved) window.updateUI();
         });
@@ -924,9 +1014,8 @@
         <div class="flex gap-2 md:gap-8 justify-center flex-wrap">
             <button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-sm md:text-lg font-semibold tab-active transition-all">Apresentação</button>
             <button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button>
+            <button onclick="window.switchTab('area-cla')" id="btn-area-cla" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Área do Clã</button>
             <button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button>
-            <button onclick="window.switchTab('clan-events')" id="btn-clan-events" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos do Clã</button>
-            <button onclick="window.switchTab('missoes')" id="btn-missoes" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Missões</button>
             <button onclick="window.switchTab('sorteios')" id="btn-sorteios" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Sorteios</button>
             <button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button>
             <button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button>
@@ -962,6 +1051,68 @@
             <div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left"></div>
         </div>
 
+        <!-- ABA ÁREA DO CLÃ -->
+        <div id="tab-area-cla" class="hidden">
+            <div class="max-w-4xl mx-auto mb-8 flex justify-center gap-4 flex-wrap">
+                <button onclick="window.switchSubTab('eventos-cla')" id="subbtn-eventos-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest subtab-active shadow-md">Eventos do Clã</button>
+                <button onclick="window.switchSubTab('sorteios-cla')" id="subbtn-sorteios-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Sorteios do Clã</button>
+                <button onclick="window.switchSubTab('missoes-cla')" id="subbtn-missoes-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Missões do Clã</button>
+            </div>
+
+            <!-- SUB-ABA EVENTOS DO CLÃ -->
+            <div id="subtab-eventos-cla">
+                <div class="bg-purple-50 border-2 border-purple-100 p-6 rounded-3xl mb-8 text-sm text-purple-700 max-w-4xl mx-auto flex items-start gap-4">
+                    <i data-lucide="shield" class="w-6 h-6 flex-shrink-0"></i>
+                    <p><strong>Área Restrita:</strong> Eventos exclusivos para membros do Clã AFK.</p>
+                </div>
+                <div id="clan-suggestions-section" class="hidden mb-12">
+                    <h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Internas</h3>
+                    <div id="clan-suggested-events-list"></div>
+                </div>
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
+                    <h2 class="text-2xl font-bold text-purple-500 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="swords"></i> Eventos Internos</h2>
+                    <button id="btn-clan-event-panel" onclick="window.openCreateClanEventModal()" class="hidden bg-purple-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-purple-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir</button>
+                </div>
+                <div id="clan-active-events-list"></div>
+                <div id="clan-no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-purple-200 p-8 text-center max-w-4xl mx-auto">
+                    <h3 class="text-3xl font-extrabold text-purple-400 mb-2 uppercase">Sem eventos internos</h3>
+                    <p class="text-slate-500 text-lg">Sugira algo novo!</p>
+                </div>
+                <div class="mt-16 border-t border-purple-100 pt-10 text-left">
+                    <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico Interno</h3>
+                    <div id="clan-history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+                </div>
+            </div>
+
+            <!-- SUB-ABA SORTEIOS DO CLÃ -->
+            <div id="subtab-sorteios-cla" class="hidden">
+                <div class="bg-purple-50 border-2 border-purple-100 p-6 rounded-3xl mb-8 text-sm text-purple-700 max-w-4xl mx-auto flex items-start gap-4">
+                    <i data-lucide="gift" class="w-6 h-6 flex-shrink-0"></i>
+                    <p><strong>Sugestões de Sorteio:</strong> Membros podem sugerir sorteios. Após aprovação da Luhnny, o criador poderá realizar o sorteio normalmente!</p>
+                </div>
+                <div id="btn-admin-clan-giveaway" class="hidden mb-8 text-center">
+                    <button onclick="window.openCreateGiveawayModal(true)" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
+                        <i data-lucide="gift"></i> Novo Sorteio do Clã
+                    </button>
+                </div>
+                <div id="clan-giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div>
+            </div>
+
+            <!-- SUB-ABA MISSÕES DO CLÃ -->
+            <div id="subtab-missoes-cla" class="hidden">
+                <div class="bg-purple-50 border-2 border-purple-100 p-6 rounded-3xl mb-8 text-sm text-purple-700 max-w-4xl mx-auto flex items-start gap-4">
+                    <i data-lucide="scroll" class="w-6 h-6 flex-shrink-0"></i>
+                    <p><strong>Missões do Clã:</strong> Complete objetivos para ganhar recompensas exclusivas ajudando o clã! <b>(Máximo de 2 missões por vez)</b></p>
+                </div>
+                <div id="admin-mission-controls" class="hidden mb-8 text-center">
+                    <button onclick="window.openModal('modal-create-mission')" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
+                        <i data-lucide="plus-circle"></i> Nova Missão
+                    </button>
+                </div>
+                <div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+            </div>
+        </div>
+
         <div id="tab-eventos" class="hidden">
             <div class="bg-pink-50 border-2 border-pink-100 p-6 rounded-3xl mb-8 text-sm text-pink-700 max-w-4xl mx-auto flex items-start gap-4">
                 <i data-lucide="info" class="w-6 h-6 flex-shrink-0"></i>
@@ -984,39 +1135,6 @@
                 <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico</h3>
                 <div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
             </div>
-        </div>
-
-        <div id="tab-clan-events" class="hidden">
-            <div class="bg-purple-50 border-2 border-purple-100 p-6 rounded-3xl mb-8 text-sm text-purple-700 max-w-4xl mx-auto flex items-start gap-4">
-                <i data-lucide="shield" class="w-6 h-6 flex-shrink-0"></i>
-                <p><strong>Área Restrita:</strong> Eventos exclusivos para membros do Clã AFK.</p>
-            </div>
-            <div id="clan-suggestions-section" class="hidden mb-12">
-                <h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Internas</h3>
-                <div id="clan-suggested-events-list"></div>
-            </div>
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left">
-                <h2 class="text-2xl font-bold text-purple-500 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="swords"></i> Eventos Internos</h2>
-                <button id="btn-clan-event-panel" onclick="window.openCreateClanEventModal()" class="hidden bg-purple-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-purple-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir</button>
-            </div>
-            <div id="clan-active-events-list"></div>
-            <div id="clan-no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-purple-200 p-8 text-center max-w-4xl mx-auto">
-                <h3 class="text-3xl font-extrabold text-purple-400 mb-2 uppercase">Sem eventos internos</h3>
-                <p class="text-slate-500 text-lg">Sugira algo novo!</p>
-            </div>
-            <div class="mt-16 border-t border-purple-100 pt-10 text-left">
-                <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico Interno</h3>
-                <div id="clan-history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
-            </div>
-        </div>
-
-        <div id="tab-missoes" class="hidden">
-            <div id="admin-mission-controls" class="hidden mb-8 text-center">
-                <button onclick="window.openModal('modal-create-mission')" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
-                    <i data-lucide="plus-circle"></i> Nova Missão
-                </button>
-            </div>
-            <div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
         </div>
 
         <div id="tab-sorteios" class="hidden">
@@ -1170,6 +1288,31 @@
         </div>
     </div>
 
+    <!-- MODAL CRIAR SORTEIO CLÃ -->
+    <div id="modal-create-clan-giveaway" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border-4 border-purple-100">
+            <h3 id="modal-title-clan-giveaway" class="text-2xl font-bold text-purple-600 mb-6 uppercase tracking-tighter leading-tight">Novo Sorteio do Clã</h3>
+            <form id="form-create-clan-giveaway" onsubmit="event.preventDefault(); window.saveGiveaway(true);" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Prêmio:</label>
+                    <input type="text" id="clan-giv-prize" placeholder="Ex: Itens Especiais" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-purple-300 outline-none">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Dia:</label>
+                        <input type="date" id="clan-giv-date" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-purple-300 outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Hora:</label>
+                        <input type="time" id="clan-giv-time" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-purple-300 outline-none">
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-purple-500 text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Salvar Sorteio do Clã</button>
+                <button type="button" onclick="window.closeModal('modal-create-clan-giveaway')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-purple-400 transition-colors">Cancelar</button>
+            </form>
+        </div>
+    </div>
+
     <!-- MODAL VER PARTICIPANTES SORTEIO -->
     <div id="modal-view-participants" class="hidden fixed inset-0 z-[1150] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
@@ -1235,12 +1378,35 @@
             </form>
         </div>
     </div>
+
+    <!-- MODAL ADICIONAR ALIANÇA -->
+    <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter">Nova Aliança</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nome do Clã:</label>
+                    <input type="text" id="ali-name" placeholder="Ex: Tenebris" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">TAG do Clã:</label>
+                    <input type="text" id="ali-tag" placeholder="Ex: TNB" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Confirmar Aliança</button>
+                <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
+            </div>
+        </div>
+    </div>
     
     <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button></div></div></div>
 
     <div id="modal-confirm-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+    <div id="modal-confirm-clan-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio do Clã?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete(true)" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-clan-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label><input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label><input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula):</label><input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div></div><div class="flex gap-4 mt-8"><button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase">Salvar</button><button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500 uppercase">Cancelar</button></div></div></div>
 
