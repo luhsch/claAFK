@@ -700,16 +700,18 @@
         };
 
         window.runGiveawayDraw = async (id) => {
-            // Apenas Luhnny pode rodar sorteio
-            if (!currentUser || currentUser.name !== "Luhnny") return window.notify("Apenas a Luhnny pode realizar o sorteio.", "error", false);
-            
             const giv = allGiveaways.find(g => g.id === id);
-            if (!giv || !giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error", false);
+            if (!giv) return;
+
+            // Permissão: Luhnny ou o Criador do sorteio
+            const isAuthorized = currentUser && (currentUser.name === "Luhnny" || currentUser.name === giv.createdBy);
+            if (!isAuthorized) return window.notify("Apenas a Luhnny ou o criador podem realizar o sorteio.", "error", false);
+            
+            if (!giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error", false);
 
             // Algoritmo de sorteio criptograficamente seguro para garantir imparcialidade total
             const randomBuffer = new Uint32Array(1);
             window.crypto.getRandomValues(randomBuffer);
-            // O operador % (módulo) garante que o número esteja dentro do intervalo de participantes
             const winnerIndex = randomBuffer[0] % giv.participants.length;
             const winner = giv.participants[winnerIndex];
 
@@ -748,6 +750,7 @@
                 const isParticipant = currentUser && (g.participants || []).includes(currentUser.name);
                 const hasWinner = g.winner !== null;
                 const pCount = (g.participants || []).length;
+                const isCreator = currentUser && (g.createdBy === currentUser.name || isLuhnny);
 
                 let actionArea = '';
 
@@ -771,26 +774,25 @@
                     }
 
                     let drawBtn = '';
-                    // Botão para sortear e ver participantes (Luhnny)
-                    if (isLuhnny && pCount > 0) {
+                    // Botão para sortear visível para Luhnny ou o Criador
+                    if (isCreator && pCount > 0) {
                         drawBtn = `
                         <div class="mt-3 flex gap-2">
-                            <button onclick="window.runGiveawayDraw('${g.id}')" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear</button>
+                            <button onclick="window.runGiveawayDraw('${g.id}')" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button>
                             <button onclick="window.viewParticipants('${g.id}')" class="px-4 py-3 rounded-xl bg-pink-100 text-pink-600 font-bold shadow-sm hover:bg-pink-200 transition"><i data-lucide="eye"></i></button>
                         </div>`;
-                    } else if (isLuhnny && pCount === 0) {
+                    } else if (isCreator && pCount === 0) {
                         drawBtn = `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>`;
-                    } else if (isEventAdmin && !isLuhnny) {
-                        // Outros admins podem ver participantes também, mas não sortear
+                    } else if (isEventAdmin) {
                          drawBtn = `<button onclick="window.viewParticipants('${g.id}')" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>`;
                     }
 
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
                 }
 
-                // Botões de administração (Deletar e Editar)
+                // Botões de administração (Deletar e Editar) - Disponíveis para Admins ou o Criador
                 let adminControls = '';
-                if (isEventAdmin) {
+                if (isEventAdmin || isCreator) {
                     adminControls = `
                     <div class="absolute top-4 right-4 flex gap-2">
                         <button onclick="window.editGiveaway('${g.id}')" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button>
@@ -1915,7 +1917,7 @@
         </div>
     </main>
 
-    <footer class="py-10 text-center text-pink-400 text-sm opacity-70 uppercase tracking-tighter font-semibold">Clã AFK fundado em 2025 por Luhnny</footer>
+    <footer class="py-10 text-center text-pink-400 text-sm uppercase tracking-tighter font-semibold">Clã AFK fundado em 2025 por Luhnny</footer>
 
     <!-- MODAL DE LOGIN / REGISTRO -->
     <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg">
@@ -2110,7 +2112,7 @@
         </div>
     </div>
 
-    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
