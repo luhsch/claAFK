@@ -19,7 +19,7 @@
         .recruitment-badge { animation: subtle-pulse 3s infinite ease-in-out; }
         .btn-attention { animation: attention-pulse 2s infinite; }
         .modal-bg { background-color: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
-        .subtab-active { background-color: #db2777; color: white; }
+        .subtab-active { background-color: #db2777 !important; color: white !important; box-shadow: 0 4px 12px rgba(219, 39, 119, 0.3); }
     </style>
 
     <!-- Firebase SDK -->
@@ -304,8 +304,15 @@
             tabs.forEach(t => {
                 const el = document.getElementById('subtab-' + t);
                 const btn = document.getElementById('subbtn-' + t);
-                if (t === sub) { el.classList.remove('hidden'); btn.classList.add('subtab-active'); }
-                else { el.classList.add('hidden'); btn.classList.remove('subtab-active'); }
+                if (t === sub) { 
+                    el.classList.remove('hidden'); 
+                    btn.classList.add('subtab-active');
+                    btn.classList.remove('bg-slate-100', 'text-slate-500');
+                } else { 
+                    el.classList.add('hidden'); 
+                    btn.classList.remove('subtab-active');
+                    btn.classList.add('bg-slate-100', 'text-slate-500');
+                }
             });
             lucide.createIcons();
         };
@@ -1054,7 +1061,7 @@
         <!-- ABA ÁREA DO CLÃ -->
         <div id="tab-area-cla" class="hidden">
             <div class="max-w-4xl mx-auto mb-8 flex justify-center gap-4 flex-wrap">
-                <button onclick="window.switchSubTab('eventos-cla')" id="subbtn-eventos-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest subtab-active shadow-md">Eventos do Clã</button>
+                <button onclick="window.switchSubTab('eventos-cla')" id="subbtn-eventos-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Eventos do Clã</button>
                 <button onclick="window.switchSubTab('sorteios-cla')" id="subbtn-sorteios-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Sorteios do Clã</button>
                 <button onclick="window.switchSubTab('missoes-cla')" id="subbtn-missoes-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Missões do Clã</button>
             </div>
