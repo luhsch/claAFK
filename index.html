@@ -52,6 +52,7 @@
         let allMissions = [];
         let allGiveaways = []; 
         let allClanGiveaways = []; 
+        let allAuthorizedMembers = [];
         let hiddenStaticMembers = []; 
         let memberDetailsOverrides = {}; 
         let isRecruitmentOpen = true; 
@@ -250,10 +251,12 @@
             if (type === 'member') {
                 const staticMatch = ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase());
                 const recruitMatch = allApplications.find(app => app.nick.toLowerCase() === nick.toLowerCase() && app.status === 'aprovado');
-                if (!staticMatch && !recruitMatch) {
-                    return window.notify("Este Nick não está na lista de membros permitidos e não possui aprovação recente.", "error", false);
+                const manualMatch = allAuthorizedMembers.find(m => m.nick.toLowerCase() === nick.toLowerCase());
+                
+                if (!staticMatch && !recruitMatch && !manualMatch) {
+                    return window.notify("Este Nick não está autorizado a registrar-se como membro.", "error", false);
                 }
-                finalName = staticMatch || (recruitMatch ? recruitMatch.nick : nick);
+                finalName = staticMatch || (recruitMatch ? recruitMatch.nick : (manualMatch ? manualMatch.nick : nick));
             }
             try {
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', finalName.toLowerCase());
@@ -318,6 +321,24 @@
             lucide.createIcons();
         };
 
+        window.addMemberManual = async () => {
+            const nick = document.getElementById('add-manual-nick').value.trim();
+            if (!nick) return window.notify("Digite o Nick.", "error");
+            try {
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'authorized_members', nick.toLowerCase()), { 
+                    nick, 
+                    addedAt: Date.now(),
+                    addedBy: currentUser.name
+                });
+                window.notify(`Membro ${nick} autorizado com sucesso!`, "success");
+                window.closeModal('modal-add-member-manual');
+                document.getElementById('add-manual-nick').value = "";
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao autorizar membro.", "error");
+            }
+        };
+
         window.renderMembers = () => {
             const grid = document.getElementById('members-grid'); 
             const countEl = document.getElementById('members-count');
@@ -359,15 +380,30 @@
                         isStatic: false
                     });
                 });
+            
+            const manualMembers = allAuthorizedMembers.map(m => getMemberData({
+                nick: m.nick,
+                tags: ["membro"],
+                aniv: "N/I",
+                disp: "N/I",
+                img: `https://ui-avatars.com/api/?name=${m.nick}&background=f9a8d4&color=fff`,
+                isStatic: false,
+                isManual: true,
+                id: m.id
+            }));
+
             const visibleStaticMembers = STATIC_MEMBERS
                 .filter(m => !hiddenStaticMembers.includes(m.nick))
                 .map(m => getMemberData({...m, isStatic: true}));
+            
             const combinedMembers = [...visibleStaticMembers];
-            approvedMembers.forEach(newM => {
+            
+            [...approvedMembers, ...manualMembers].forEach(newM => {
                 if (!combinedMembers.some(m => m.nick.toLowerCase() === newM.nick.toLowerCase())) {
                     combinedMembers.push(newM);
                 }
             });
+
             if(countEl) countEl.innerText = `Total: ${combinedMembers.length} membros registrados`;
             grid.innerHTML = '';
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
@@ -388,10 +424,11 @@
                 });
                 let adminBtns = '';
                 if (isLuhnny) {
+                    const mData = JSON.stringify(m).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     adminBtns = `
                         <div class="absolute top-4 right-4 flex gap-1 z-10">
-                            <button onclick='window.openEditMemberModal(${JSON.stringify(m)})' class="p-1.5 bg-white text-blue-400 hover:text-blue-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
-                            <button onclick='window.requestDeleteMember(${JSON.stringify(m)})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                            <button onclick='window.openEditMemberModal(${mData})' class="p-1.5 bg-white text-blue-400 hover:text-blue-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                            <button onclick='window.requestDeleteMember(${mData})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
                     `;
                 }
@@ -423,7 +460,7 @@
             document.getElementById('edit-mem-aniv').value = member.aniv;
             document.getElementById('edit-mem-disp').value = member.disp;
             document.getElementById('edit-mem-tags').value = (member.tags || []).join(', ');
-            document.getElementById('edit-mem-img-input').value = ""; // Reset file input
+            document.getElementById('edit-mem-img-input').value = ""; 
             window.openModal('modal-edit-member');
         };
 
@@ -452,7 +489,6 @@
             if (imgBase64) updateData.img = imgBase64;
 
             try {
-                // Manter dados antigos se não alterados
                 const currentRef = doc(db, 'artifacts', appId, 'public', 'data', 'member_details', editingMemberNick.toLowerCase());
                 const currentSnap = await getDoc(currentRef);
                 const finalData = currentSnap.exists() ? { ...currentSnap.data(), ...updateData } : updateData;
@@ -482,6 +518,8 @@
                     if (!currentList.includes(memberToDelete.nick)) {
                         await setDoc(settingsRef, { nicks: [...currentList, memberToDelete.nick] });
                     }
+                } else if (memberToDelete.isManual) {
+                    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'authorized_members', memberToDelete.nick.toLowerCase()));
                 } else {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', memberToDelete.id), { status: 'removed' });
                 }
@@ -494,7 +532,6 @@
             memberToDelete = null;
         };
 
-        // --- SISTEMA DE MISSÕES ATUALIZADO ---
         window.createMission = async () => {
             const objective = document.getElementById('mis-objective').value.trim();
             const reward = document.getElementById('mis-reward').value.trim();
@@ -516,7 +553,6 @@
 
         window.takeMission = async (id) => {
             if (!currentUser) return;
-            // Verificar limite de 2 missões
             const myMissions = allMissions.filter(m => m.takenBy === currentUser.name && m.status === 'taken');
             if (myMissions.length >= 2) return window.notify("Você já possui 2 missões em andamento!", "error", false);
             
@@ -672,7 +708,6 @@
                 const next = giv.participants.filter(p => p !== nick);
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: next });
                 window.notify(`Removido(a): ${nick}`, "info");
-                // Atualizar modal
                 setTimeout(() => window.viewParticipants(id, isClan), 200);
             }
         };
@@ -729,7 +764,7 @@
             window.crypto.getRandomValues(randomBuffer);
             const winnerIndex = randomBuffer[0] % giv.participants.length;
             const winner = giv.participants[winnerIndex];
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { winner: winner, status: 'closed' });
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'coll', id), { winner: winner, status: 'closed' });
         };
 
         window.requestDeleteGiveaway = (id, isClan = false) => { 
@@ -755,7 +790,6 @@
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
             
-            // Filtrar sugestões se não for admin
             const visibleList = isClan && !isEventAdmin 
                 ? dataList.filter(g => g.status !== 'suggestion' || g.createdBy === currentUser?.name)
                 : dataList;
@@ -795,7 +829,6 @@
         window.createEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            const isClan = (type === 'active' || type === 'suggestion' || type === 'history') && ev.theme; // Heurística simples para detectar clan_events
             let controls = '';
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const pCount = (ev.participants || []).length;
@@ -868,7 +901,7 @@
         };
 
         window.renderClanEvents = function() {
-            const actC = document.getElementById('clan-active-events-list'); const histC = document.getElementById('clan-history-events-list'); const suggC = document.getElementById('clan-suggested-events-list'); const suggS = document.getElementById('suggestions-section');
+            const actC = document.getElementById('clan-active-events-list'); const histC = document.getElementById('clan-history-events-list'); const suggC = document.getElementById('clan-suggested-events-list'); const suggS = document.getElementById('clan-suggestions-section');
             if(!actC) return; actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
             const actives = allClanEvents.filter(e => e.status === 'active'); const history = allClanEvents.filter(e => e.status === 'ended'); const suggestions = allClanEvents.filter(e => e.status === 'suggestion');
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
@@ -973,10 +1006,50 @@
             if (currentUser && currentUser.name === "Luhnny" && allAllianceRequests.length > 0) { reqC.classList.remove('hidden'); reqL.innerHTML = ''; allAllianceRequests.forEach(r => { reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`; }); } else reqC?.classList.add('hidden');
         };
 
+        // --- CORREÇÃO DO FORMULÁRIO DE RECRUTAMENTO ---
+        window.requestRecruitmentReview = async () => {
+            if (!isRecruitmentOpen) return window.notify("O recrutamento está fechado!", "error");
+            
+            const nick = document.getElementById('rec-nick').value.trim();
+            const discord = document.getElementById('rec-discord').value.trim();
+            const idade = document.getElementById('rec-idade').value;
+            const tempo = document.getElementById('rec-tempo').value;
+            const voice = document.getElementById('rec-voice').value;
+            const clas = document.getElementById('rec-clas').value;
+            const combate = document.getElementById('rec-combate').value;
+            const build = document.getElementById('rec-build').value;
+            const farm = document.getElementById('rec-farm').value;
+            const plataforma = document.getElementById('rec-plat').value;
+            const rank = document.getElementById('rec-rank').value;
+            const aniversario = document.getElementById('rec-aniv').value;
+            const horarios = document.getElementById('rec-horarios').value;
+
+            if (!nick || !discord || !idade || !tempo) {
+                return window.notify("Preencha os campos obrigatórios!", "error");
+            }
+
+            try {
+                const docRef = await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), {
+                    nick, discord, idade, tempo, voice, clas, combate, build, farm, plataforma, rank, aniversario, horarios,
+                    status: 'pendente',
+                    createdAt: Date.now()
+                });
+                localStorage.setItem('afk_recruitment_id', docRef.id);
+                localStorage.setItem('afk_last_submission_date', new Date().toDateString());
+                window.notify("Formulário enviado com sucesso!", "success");
+                document.getElementById('form-recruitment').reset();
+                window.renderMyRecruitmentStatus();
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao enviar formulário.", "error");
+            }
+        };
+
         window.updateApplicationStatus = async (id, status) => { if (!currentUser || !SUPER_ADMINS.includes(currentUser.name)) return; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), { status: status, handledBy: currentUser.name }); window.notify(`Pedido ${status}!`, "success", false); };
         window.requestDeleteApplication = (id, status) => { applicationToDeleteId = id; applicationToDeleteStatus = status; window.openModal('modal-confirm-rec-delete'); };
         window.confirmRecDelete = async () => { if (!applicationToDeleteId) return; if (applicationToDeleteStatus === 'aprovado') { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId), { archived: true }); window.notify("Candidatura arquivada da lista. O membro continua ativo!", "success", false); } else { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', applicationToDeleteId)); window.notify("Candidatura removida permanentemente.", "success", false); } window.closeModal('modal-confirm-rec-delete'); };
         window.toggleRecruitmentStatus = async () => { if (currentUser?.name !== "Luhnny") return; const newStatus = !isRecruitmentOpen; await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), { isOpen: newStatus }); };
+        
         window.renderAdminApplications = function() {
             const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
             c.innerHTML = ''; const visibleApps = allApplications.filter(app => !app.archived);
@@ -989,7 +1062,7 @@
             if (!statusContainer) return; if (!localId) { statusContainer.innerHTML = ''; if(recruitmentTimerInterval) clearInterval(recruitmentTimerInterval); return; }
             if (initialRecruitmentListLoad) { statusContainer.innerHTML = '<div class="mb-10 text-slate-400 italic text-sm">Verificando status...</div>'; return; }
             let myApp = allApplications.find(a => a.id === localId);
-            let displayStatus = myApp ? myApp.status : 'negado'; let displayNick = myApp ? myApp.nick : 'Candidato'; let displayHandledBy = myApp ? myApp.handledBy : null;
+            let displayStatus = myApp ? myApp.status : 'pendente'; let displayNick = myApp ? myApp.nick : 'Candidato'; let displayHandledBy = myApp ? myApp.handledBy : null;
             const colors = { aprovado: 'bg-green-50 border-green-200 text-green-600', negado: 'bg-red-50 border-red-200 text-red-600', pendente: 'bg-yellow-50 border-yellow-200 text-yellow-600' };
             const icon = { aprovado: 'check-circle', negado: 'x-circle', pendente: 'clock' };
             const msg = { aprovado: 'Parabéns! Foste aceito no Clã AFK!', negado: 'Infelizmente sua candidatura não foi aceita desta vez.', pendente: 'A tua candidatura está em análise. Aguarda!' };
@@ -1016,6 +1089,7 @@
             const recFormS = document.getElementById('recruitment-form-section'); 
             const recClosedM = document.getElementById('recruitment-closed-message');
             const btnRecNav = document.getElementById('btn-recrutamento');
+            const btnAddMemberManual = document.getElementById('btn-add-member-manual');
             
             if (currentUser) {
                 lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden'); document.getElementById('logged-name').innerText = currentUser.name;
@@ -1026,11 +1100,13 @@
                     recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO"; 
                     recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`; 
                     btnRecNav?.classList.remove('hidden'); 
+                    btnAddMemberManual?.classList.remove('hidden');
                 } else { 
                     aRecPanel?.classList.add('hidden'); 
                     aAllyBtn?.classList.add('hidden'); 
                     recToggle?.classList.add('hidden'); 
                     btnRecNav?.classList.add('hidden'); 
+                    btnAddMemberManual?.classList.add('hidden');
                 }
                 if (canManageMissions) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
                 if (isEventAdmin) { aEventBtn?.classList.remove('hidden'); aGiveawayBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); aClanEventPanelBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden'); }
@@ -1038,6 +1114,7 @@
             } else {
                 lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden');
                 btnRecNav?.classList.remove('hidden'); 
+                btnAddMemberManual?.classList.add('hidden');
             }
             if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); } else { recFormS?.classList.add('hidden'); recClosedM?.classList.remove('hidden'); }
             const hBadge = document.getElementById('header-rec-badge'); if (hBadge) { hBadge.innerHTML = isRecruitmentOpen ? '<i data-lucide="megaphone" class="w-4 h-4"></i> Recrutamento Aberto' : '<i data-lucide="lock" class="w-4 h-4"></i> Recrutamento Fechado'; hBadge.className = `bg-white px-5 py-2 rounded-2xl text-xs font-bold uppercase border-2 shadow-2xl flex items-center gap-2 ${isRecruitmentOpen ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`; }
@@ -1070,6 +1147,7 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'member_details'), (s) => { memberDetailsOverrides = {}; s.docs.forEach(d => { memberDetailsOverrides[d.id] = d.data(); }); window.renderMembers(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'giveaways'), (s) => { if (!initialGiveawayLoad) { s.docChanges().forEach(change => { if (change.type === "added") window.notify("🎁 Novo Sorteio Rolando!", "success", true); if (change.type === "modified") { const data = change.doc.data(); if(data.winner && data.status === 'closed') window.notify(`🏆 Temos um vencedor no sorteio: ${data.winner}!`, "success", true); } }); } allGiveaways = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderGiveaways(); initialGiveawayLoad = false; });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'clan_giveaways'), (s) => { if (!initialClanGiveawayLoad) { s.docChanges().forEach(change => { if (change.type === "added") window.notify("🛡️ Novo Sorteio do Clã!", "success", true); if (change.type === "modified") { const data = change.doc.data(); if(data.winner && data.status === 'closed') window.notify(`🛡️ Temos um vencedor no sorteio do Clã: ${data.winner}!`, "success", true); } }); } allClanGiveaways = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderGiveaways(true); initialClanGiveawayLoad = false; });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'authorized_members'), (s) => { allAuthorizedMembers = s.docs.map(d => ({id: d.id, ...d.data()})); window.renderMembers(); });
             const saved = localStorage.getItem('afk_user'); if (saved) { currentUser = JSON.parse(saved); window.updateUI(); }
             if (!saved) window.updateUI();
         });
@@ -1137,7 +1215,10 @@
             </div>
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
                 <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2>
-                <div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div>
+                <div class="flex items-center gap-4">
+                    <div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div>
+                    <button id="btn-add-member-manual" onclick="window.openModal('modal-add-member-manual')" class="hidden bg-pink-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 uppercase"><i data-lucide="user-plus"></i> Adicionar Membro</button>
+                </div>
             </div>
             <div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left"></div>
         </div>
@@ -1327,7 +1408,7 @@
 
     <!-- MODAL NOVA MISSÃO -->
     <div id="modal-create-mission" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
-        <div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
             <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Missão</h3>
             <form id="form-create-mission" onsubmit="event.preventDefault(); window.createMission();" class="space-y-4">
                 <div>
@@ -1406,7 +1487,7 @@
 
     <!-- MODAL ADICIONAR ALIANÇA -->
     <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
+        <div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl">
             <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter">Nova Aliança</h3>
             <div class="space-y-4">
                 <div>
@@ -1419,6 +1500,22 @@
                 </div>
                 <button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Confirmar Aliança</button>
                 <button onclick="window.closeModal('modal-admin-alliance')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ADICIONAR MEMBRO MANUAL (LUHNNY) -->
+    <div id="modal-add-member-manual" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border-4 border-pink-100">
+            <h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter">Autorizar Membro</h3>
+            <p class="text-xs text-slate-500 mb-4">Membros adicionados aqui poderão criar conta e acessar as abas do clã automaticamente.</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick do Jogador:</label>
+                    <input type="text" id="add-manual-nick" placeholder="Ex: Jogador123" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none">
+                </div>
+                <button onclick="window.addMemberManual()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Autorizar Acesso</button>
+                <button onclick="window.closeModal('modal-add-member-manual')" class="w-full text-slate-400 text-sm py-2 font-semibold uppercase text-center hover:text-pink-400 transition-colors">Cancelar</button>
             </div>
         </div>
     </div>
@@ -1500,6 +1597,17 @@
     <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
     <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3><div class="flex gap-4"><button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+
+    <!-- MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE RECRUTAMENTO (ADICIONADO PARA CORREÇÃO) -->
+    <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all">
+            <h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Candidatura?</h3>
+            <div class="flex gap-4">
+                <button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button>
+                <button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button>
+            </div>
+        </div>
+    </div>
 
     <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label><input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label><input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags (separadas por vírgula):</label><input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Alterar Foto de Perfil:</label><input type="file" id="edit-mem-img-input" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-pink-50 file:text-pink-700 hover:file:bg-pink-100 cursor-pointer"></div></div><div class="flex gap-4 mt-8"><button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:shadow-xl uppercase">Salvar</button><button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500 uppercase">Cancelar</button></div></div></div>
 
