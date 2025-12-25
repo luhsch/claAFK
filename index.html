@@ -50,6 +50,7 @@
         let allApplications = [];
         let allIdentities = [];
         let allMissions = [];
+        let allCompletedMissions = []; // Variável para o histórico
         let allGiveaways = []; 
         let allClanGiveaways = []; 
         let allAuthorizedMembers = [];
@@ -197,7 +198,8 @@
                 loginForm.classList.add('hidden');
                 registerForm.classList.remove('hidden');
                 tabRegister.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
-                tabRegister.classList.remove('text-slate-400');
+                tabRegister.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
+                tabRegister.classList.add('text-slate-400');
                 tabLogin.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
                 tabLogin.classList.add('text-slate-400');
                 window.populateAllySelectRegister();
@@ -579,43 +581,84 @@
 
         window.confirmMissionDelete = async () => {
             if (missionToDeleteId) {
+                const mission = allMissions.find(m => m.id === missionToDeleteId);
+                // Se a missão estava em andamento e foi finalizada, salvar no histórico
+                if (mission && mission.status === 'taken') {
+                    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'completed_missions'), {
+                        objective: mission.objective,
+                        reward: mission.reward,
+                        tag: mission.tag,
+                        takenBy: mission.takenBy,
+                        createdBy: mission.createdBy,
+                        completedAt: Date.now()
+                    });
+                }
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', missionToDeleteId));
-                window.notify("Missão removida/concluída.", "success", false);
+                window.notify("Missão concluída com sucesso!", "success", false);
                 window.closeModal('modal-confirm-mission-delete');
             }
         };
 
         window.renderMissions = function() {
             const list = document.getElementById('missions-list'); if(!list) return;
+            const historyList = document.getElementById('completed-missions-list'); if(!historyList) return;
+            
             list.innerHTML = '';
+            historyList.innerHTML = '';
+
+            // Render Ativas
             if (allMissions.length === 0) {
                 list.innerHTML = '<div class="col-span-full text-center p-8 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400">Nenhuma missão disponível no momento.</div>';
-                return;
-            }
-            allMissions.sort((a,b) => b.createdAt - a.createdAt).forEach(m => {
-                const isTaken = m.status === 'taken';
-                const canManage = currentUser && MISSION_ADMINS.includes(currentUser.name);
-                const isMyMission = currentUser && m.takenBy === currentUser.name;
-                let buttonHtml = '';
-                if (canManage) {
-                    buttonHtml = `<button onclick="window.requestDeleteMission('${m.id}')" class="w-full mt-4 py-2 rounded-xl border-2 border-red-100 text-red-400 font-bold hover:bg-red-50 transition uppercase text-xs">Concluir / Excluir</button>`;
-                } else if (isTaken) {
-                    if (isMyMission) {
-                        buttonHtml = `<div class="grid grid-cols-2 gap-2 mt-4"><button onclick="window.requestDeleteMission('${m.id}')" class="py-2 bg-green-500 text-white rounded-xl font-bold text-xs uppercase shadow-md hover:bg-green-600 transition">Concluído</button><button onclick="window.quitMission('${m.id}')" class="py-2 bg-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase hover:bg-slate-300 transition">Desistir</button></div>`;
+            } else {
+                allMissions.sort((a,b) => b.createdAt - a.createdAt).forEach(m => {
+                    const isTaken = m.status === 'taken';
+                    const canManage = currentUser && MISSION_ADMINS.includes(currentUser.name);
+                    const isMyMission = currentUser && m.takenBy === currentUser.name;
+                    let buttonHtml = '';
+                    if (canManage) {
+                        buttonHtml = `<button onclick="window.requestDeleteMission('${m.id}')" class="w-full mt-4 py-2 rounded-xl border-2 border-red-100 text-red-400 font-bold hover:bg-red-50 transition uppercase text-xs">Concluir / Excluir</button>`;
+                    } else if (isTaken) {
+                        if (isMyMission) {
+                            buttonHtml = `<div class="grid grid-cols-2 gap-2 mt-4"><button onclick="window.requestDeleteMission('${m.id}')" class="py-2 bg-green-500 text-white rounded-xl font-bold text-xs uppercase shadow-md hover:bg-green-600 transition">Concluído</button><button onclick="window.quitMission('${m.id}')" class="py-2 bg-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase hover:bg-slate-300 transition">Desistir</button></div>`;
+                        } else {
+                            buttonHtml = `<div class="w-full mt-4 py-2 bg-slate-50 text-slate-400 rounded-xl font-bold text-xs uppercase text-center border">Em andamento</div>`;
+                        }
                     } else {
-                        buttonHtml = `<div class="w-full mt-4 py-2 bg-slate-50 text-slate-400 rounded-xl font-bold text-xs uppercase text-center border">Em andamento</div>`;
+                        buttonHtml = `<button onclick="window.takeMission('${m.id}')" class="w-full mt-4 py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl">Aceitar Missão</button>`;
                     }
-                } else {
-                    buttonHtml = `<button onclick="window.takeMission('${m.id}')" class="w-full mt-4 py-3 rounded-xl pink-gradient text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl">Aceitar Missão</button>`;
-                }
-                let statusBadge = isTaken ? `<span class="bg-yellow-100 text-yellow-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase flex items-center gap-1"><i data-lucide="user"></i> ${m.takenBy}</span>` : `<span class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase">Disponível</span>`;
-                let tagColor = "bg-slate-100 text-slate-500";
-                if(m.tag === 'Farm') tagColor = "bg-green-500 text-white";
-                if(m.tag === 'Build') tagColor = "bg-amber-500 text-white";
-                if(m.tag === 'Recursos') tagColor = "bg-blue-500 text-white";
-                if(m.tag === 'Exploração') tagColor = "bg-purple-500 text-white";
-                list.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 ${isTaken ? 'border-yellow-100 opacity-90' : 'border-pink-200'} transition hover:scale-[1.01] flex flex-col"><div class="flex justify-between items-start mb-4"><div class="flex flex-col gap-2"><span class="px-3 py-1 rounded-lg text-[10px] font-bold uppercase w-fit ${tagColor}">${m.tag || 'Missão'}</span><div class="p-3 bg-pink-50 rounded-2xl text-pink-500 w-fit"><i data-lucide="scroll" class="w-6 h-6"></i></div></div>${statusBadge}</div><h4 class="text-lg font-bold text-slate-700 mb-2 leading-tight">${m.objective}</h4><p class="text-sm text-pink-500 font-semibold flex items-center gap-2 bg-pink-50/50 p-2 rounded-lg border border-pink-50 mb-4"><i data-lucide="gift" class="w-4 h-4"></i> Recompensa: ${m.reward}</p><div class="mt-auto pt-4 border-t border-slate-50 text-[10px] text-slate-400 font-bold uppercase tracking-wider">Criada por: <span class="text-pink-400">${m.createdBy || 'Luhnny'}</span></div>${buttonHtml}</div>`;
-            });
+                    let statusBadge = isTaken ? `<span class="bg-yellow-100 text-yellow-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase flex items-center gap-1"><i data-lucide="user"></i> ${m.takenBy}</span>` : `<span class="bg-green-100 text-green-600 px-3 py-1 rounded-full text-[10px] font-bold uppercase">Disponível</span>`;
+                    let tagColor = "bg-slate-100 text-slate-500";
+                    if(m.tag === 'Farm') tagColor = "bg-green-500 text-white";
+                    if(m.tag === 'Build') tagColor = "bg-amber-500 text-white";
+                    if(m.tag === 'Recursos') tagColor = "bg-blue-500 text-white";
+                    if(m.tag === 'Exploração') tagColor = "bg-purple-500 text-white";
+                    list.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 ${isTaken ? 'border-yellow-100 opacity-90' : 'border-pink-200'} transition hover:scale-[1.01] flex flex-col"><div class="flex justify-between items-start mb-4"><div class="flex flex-col gap-2"><span class="px-3 py-1 rounded-lg text-[10px] font-bold uppercase w-fit ${tagColor}">${m.tag || 'Missão'}</span><div class="p-3 bg-pink-50 rounded-2xl text-pink-500 w-fit"><i data-lucide="scroll" class="w-6 h-6"></i></div></div>${statusBadge}</div><h4 class="text-lg font-bold text-slate-700 mb-2 leading-tight">${m.objective}</h4><p class="text-sm text-pink-500 font-semibold flex items-center gap-2 bg-pink-50/50 p-2 rounded-lg border border-pink-50 mb-4"><i data-lucide="gift" class="w-4 h-4"></i> Recompensa: ${m.reward}</p><div class="mt-auto pt-4 border-t border-slate-50 text-[10px] text-slate-400 font-bold uppercase tracking-wider">Criada por: <span class="text-pink-400">${m.createdBy || 'Luhnny'}</span></div>${buttonHtml}</div>`;
+                });
+            }
+
+            // Render Histórico
+            if (allCompletedMissions.length === 0) {
+                historyList.innerHTML = '<div class="col-span-full text-center p-6 text-slate-400 italic text-sm">Nenhuma missão concluída ainda.</div>';
+            } else {
+                allCompletedMissions.sort((a,b) => b.completedAt - a.completedAt).forEach(m => {
+                    const dateStr = new Date(m.completedAt).toLocaleDateString('pt-PT');
+                    historyList.innerHTML += `
+                        <div class="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div class="flex items-center gap-4">
+                                <div class="p-2 bg-green-100 text-green-600 rounded-lg"><i data-lucide="check" class="w-5 h-5"></i></div>
+                                <div>
+                                    <h5 class="font-bold text-slate-700 text-sm">${m.objective}</h5>
+                                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Cumprida por: <span class="text-pink-500">${m.takenBy}</span> em ${dateStr}</p>
+                                </div>
+                            </div>
+                            <div class="bg-white px-3 py-1 rounded-lg border border-green-100 text-[10px] font-bold text-green-500 uppercase flex items-center gap-1">
+                                <i data-lucide="award" class="w-3 h-3"></i> Recompensa Paga
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
             lucide.createIcons();
         };
 
@@ -1006,7 +1049,6 @@
             if (currentUser && currentUser.name === "Luhnny" && allAllianceRequests.length > 0) { reqC.classList.remove('hidden'); reqL.innerHTML = ''; allAllianceRequests.forEach(r => { reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`; }); } else reqC?.classList.add('hidden');
         };
 
-        // --- CORREÇÃO DO FORMULÁRIO DE RECRUTAMENTO ---
         window.requestRecruitmentReview = async () => {
             if (!isRecruitmentOpen) return window.notify("O recrutamento está fechado!", "error");
             
@@ -1140,6 +1182,7 @@
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { if (!initialEventLoad) { s.docChanges().forEach(change => { const d = change.doc.data(); if (change.type === "added" && d.status === 'active') window.notify("🎉 Novo Evento Criado!", "success", true); if (change.type === "modified" && d.status === 'active') { const old = allEvents.find(e => e.id === change.doc.id); if (old && old.status !== 'active') window.notify("🎉 Novo Evento Criado!", "success", true); } }); } allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); initialEventLoad = false; });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), (s) => { if (!initialClanEventLoad) { s.docChanges().forEach(change => { const d = change.doc.data(); if (change.type === "added" && d.status === 'active') window.notify("🛡️ Novo Evento do Clã!", "success", true); if (change.type === "modified" && d.status === 'active') { const old = allClanEvents.find(e => e.id === change.doc.id); if (old && old.status !== 'active') window.notify("🛡️ Novo Evento do Clã!", "success", true); } }); } allClanEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderClanEvents(); initialClanEventLoad = false; });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), (s) => { allMissions = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderMissions(); });
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'completed_missions'), (s) => { allCompletedMissions = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderMissions(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), (s) => { allAlliances = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), (s) => { allAllianceRequests = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderAlliances(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'recruitment'), (s) => { if (!initialRecruitmentListLoad) { s.docChanges().forEach(change => { if (change.type === "modified") { const data = change.doc.data(); if (currentUser && data.nick && currentUser.name.toLowerCase() === data.nick.toLowerCase()) { if (data.status === 'aprovado') window.notify(`🎉 Parabéns! A tua candidatura foi APROVADA!`, "success", true); else if (data.status === 'negado') window.notify(`🚫 A tua candidatura foi negada.`, "error", true); } } }); } allApplications = s.docs.map(d => ({id:d.id, ...d.data()})); initialRecruitmentListLoad = false; window.renderAdminApplications(); window.renderMyRecruitmentStatus(); window.renderMembers(); });
@@ -1282,6 +1325,14 @@
                     </button>
                 </div>
                 <div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+                
+                <!-- SEÇÃO DO HISTÓRICO DE MISSÕES -->
+                <div class="mt-16 border-t border-purple-100 pt-10 text-left">
+                    <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight">
+                        <i data-lucide="history"></i> Histórico de Missões
+                    </h3>
+                    <div id="completed-missions-list" class="grid grid-cols-1 gap-3 max-w-4xl mx-auto"></div>
+                </div>
             </div>
         </div>
 
