@@ -50,7 +50,7 @@
         let allApplications = [];
         let allIdentities = [];
         let allMissions = [];
-        let allCompletedMissions = []; // Variável para o histórico
+        let allCompletedMissions = []; 
         let allGiveaways = []; 
         let allClanGiveaways = []; 
         let allAuthorizedMembers = [];
@@ -76,6 +76,7 @@
         let giveawayToDeleteId = null;
         let clanGiveawayToDeleteId = null;
         let memberToDelete = null; 
+        let nickToResetAccount = null;
         
         let editingGiveawayId = null; 
         let editingClanGiveawayId = null;
@@ -154,6 +155,15 @@
             window.closeModal('modal-login');
         };
 
+        // Função auxiliar para criar/atualizar identidade
+        const syncUserIdentity = async (name, role) => {
+            const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', name.toLowerCase());
+            const identityData = { nick: name, createdAt: Date.now() };
+            if (role === 'ally') identityData.deviceId = "auth_v2";
+            else identityData.role = "member";
+            await setDoc(identityRef, identityData);
+        };
+
         window.handleKeyNav = (event, nextId, prevId, action) => {
             const isVisible = (id) => {
                 const el = document.getElementById(id);
@@ -224,15 +234,12 @@
                 if (!userSnap.exists()) return window.notify("Usuário não encontrado. Crie uma conta.", "error", false);
                 const userData = userSnap.data();
                 if (userData.password !== pass) return window.notify("Senha incorreta.", "error", false);
-                const isAlly = userData.role === 'ally';
+                
                 await updateDoc(userRef, { lastLogin: Date.now() });
-                const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', userData.name.toLowerCase());
-                const identityData = { nick: userData.name, createdAt: Date.now() };
-                if (isAlly) identityData.deviceId = "auth_v2";
-                else identityData.role = "member";
-                await setDoc(identityRef, identityData);
+                await syncUserIdentity(userData.name, userData.role);
+                
                 const isAdmin = ALL_ADMINS.includes(userData.name); 
-                window.loginSuccess({ ...userData, isAdmin, isAlly });
+                window.loginSuccess({ ...userData, isAdmin, isAlly: userData.role === 'ally' });
             } catch (e) {
                 console.error(e);
                 window.notify("Erro ao fazer login.", "error", false);
@@ -272,6 +279,10 @@
                     createdAt: Date.now()
                 };
                 await setDoc(userRef, userData);
+                
+                // Cria a identidade imediatamente no registro para a Luhnny ver
+                await syncUserIdentity(finalName, type);
+
                 if (type === 'ally') {
                     let docAlly = allAlliances.find(a => a.name === clan);
                     if (docAlly) {
@@ -285,8 +296,7 @@
                 }
                 window.notify("Conta criada com sucesso! Fazendo login...", "success", false);
                 const isAdmin = ALL_ADMINS.includes(userData.name);
-                const isAlly = type === 'ally';
-                window.loginSuccess({ ...userData, isAdmin, isAlly });
+                window.loginSuccess({ ...userData, isAdmin, isAlly: type === 'ally' });
             } catch (e) {
                 console.error(e);
                 window.notify("Erro ao registrar.", "error", false);
@@ -338,6 +348,28 @@
             } catch (e) {
                 console.error(e);
                 window.notify("Erro ao autorizar membro.", "error");
+            }
+        };
+
+        window.requestResetAccount = (nick) => {
+            nickToResetAccount = nick;
+            document.getElementById('reset-nick-display').innerText = nick;
+            window.openModal('modal-confirm-account-reset');
+        };
+
+        window.confirmAccountReset = async () => {
+            if (!nickToResetAccount) return;
+            try {
+                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', nickToResetAccount.toLowerCase());
+                const identityRef = doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', nickToResetAccount.toLowerCase());
+                await deleteDoc(userRef);
+                await deleteDoc(identityRef);
+                window.notify(`A conta de ${nickToResetAccount} foi resetada. Agora o jogador pode se cadastrar novamente!`, "success");
+                window.closeModal('modal-confirm-account-reset');
+                nickToResetAccount = null;
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao resetar conta.", "error");
             }
         };
 
@@ -429,6 +461,7 @@
                     const mData = JSON.stringify(m).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
                     adminBtns = `
                         <div class="absolute top-4 right-4 flex gap-1 z-10">
+                            <button title="Resetar Senha" onclick="window.requestResetAccount('${m.nick}')" class="p-1.5 bg-white text-pink-400 hover:text-pink-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="key" class="w-4 h-4"></i></button>
                             <button onclick='window.openEditMemberModal(${mData})' class="p-1.5 bg-white text-blue-400 hover:text-blue-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>
                             <button onclick='window.requestDeleteMember(${mData})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         </div>
@@ -582,7 +615,6 @@
         window.confirmMissionDelete = async () => {
             if (missionToDeleteId) {
                 const mission = allMissions.find(m => m.id === missionToDeleteId);
-                // Se a missão estava em andamento e foi finalizada, salvar no histórico
                 if (mission && mission.status === 'taken') {
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'completed_missions'), {
                         objective: mission.objective,
@@ -606,7 +638,6 @@
             list.innerHTML = '';
             historyList.innerHTML = '';
 
-            // Render Ativas
             if (allMissions.length === 0) {
                 list.innerHTML = '<div class="col-span-full text-center p-8 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400">Nenhuma missão disponível no momento.</div>';
             } else {
@@ -636,7 +667,6 @@
                 });
             }
 
-            // Render Histórico
             if (allCompletedMissions.length === 0) {
                 historyList.innerHTML = '<div class="col-span-full text-center p-6 text-slate-400 italic text-sm">Nenhuma missão concluída ainda.</div>';
             } else {
@@ -1035,11 +1065,43 @@
 
         window.renderIdentities = function() {
             const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name); const allyIdenC = document.getElementById('ally-identities-section'); const allyIdenL = document.getElementById('ally-identities-list'); const memIdenC = document.getElementById('member-identities-section'); const memIdenL = document.getElementById('member-identities-list');
+            const isLuhnny = currentUser && currentUser.name === "Luhnny";
+            
             if (!isAdmin) { if(allyIdenC) allyIdenC.classList.add('hidden'); if(memIdenC) memIdenC.classList.add('hidden'); return; }
-            const members = allIdentities.filter(i => { const nick = i.nick || ""; return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nick.toLowerCase()); });
-            const allies = allIdentities.filter(i => !members.includes(i));
-            if (allyIdenC && allyIdenL) { allyIdenC.classList.remove('hidden'); let alliesHtml = ''; if (allies.length === 0) alliesHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>'; else { allies.forEach(i => { alliesHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`; }); } allyIdenL.innerHTML = alliesHtml; }
-            if (memIdenC && memIdenL) { memIdenC.classList.remove('hidden'); let membersHtml = ''; if (members.length === 0) membersHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>'; else { members.forEach(i => { membersHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`; }); } memIdenL.innerHTML = membersHtml; }
+            
+            // Filtra membros: quem tem role 'member' OU está na lista de autorizados ( Allowed Members ou Authorized Members collection )
+            const members = allIdentities.filter(i => { 
+                const nickLower = (i.nick || "").toLowerCase();
+                return i.role === 'member' || 
+                       ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickLower) ||
+                       allAuthorizedMembers.some(m => m.nick.toLowerCase() === nickLower);
+            });
+            
+            // Aliados: todo o resto que não é membro
+            const allies = allIdentities.filter(i => !members.some(m => m.id === i.id));
+            
+            if (allyIdenC && allyIdenL) { 
+                allyIdenC.classList.remove('hidden'); 
+                let alliesHtml = ''; 
+                if (allies.length === 0) alliesHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>'; 
+                else { 
+                    allies.forEach(i => { 
+                        alliesHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><div class="flex gap-1">${isLuhnny ? `<button title="Resetar Senha" onclick="window.requestResetAccount('${i.nick}')" class="text-pink-400 hover:text-pink-600 transition"><i data-lucide="key" class="w-4 h-4"></i></button>`:''}<button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`; 
+                    }); 
+                } 
+                allyIdenL.innerHTML = alliesHtml; 
+            }
+            if (memIdenC && memIdenL) { 
+                memIdenC.classList.remove('hidden'); 
+                let membersHtml = ''; 
+                if (members.length === 0) membersHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>'; 
+                else { 
+                    members.forEach(i => { 
+                        membersHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><div class="flex gap-1">${isLuhnny ? `<button title="Resetar Senha" onclick="window.requestResetAccount('${i.nick}')" class="text-pink-400 hover:text-pink-600 transition"><i data-lucide="key" class="w-4 h-4"></i></button>`:''}<button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`; 
+                    }); 
+                } 
+                memIdenL.innerHTML = membersHtml; 
+            }
             lucide.createIcons();
         };
 
@@ -1326,7 +1388,6 @@
                 </div>
                 <div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
                 
-                <!-- SEÇÃO DO HISTÓRICO DE MISSÕES -->
                 <div class="mt-16 border-t border-purple-100 pt-10 text-left">
                     <h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight">
                         <i data-lucide="history"></i> Histórico de Missões
@@ -1457,6 +1518,17 @@
         </div>
     </div>
 
+    <div id="modal-confirm-account-reset" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
+        <div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all">
+            <h3 class="text-xl font-bold mb-4 text-slate-800 uppercase tracking-tighter leading-tight">Resetar Conta?</h3>
+            <p class="text-sm text-slate-500 mb-6">Isso apagará o registro de login de <strong id="reset-nick-display" class="text-pink-500"></strong>. O jogador precisará criar uma conta nova com nick e senha.</p>
+            <div class="flex gap-4">
+                <button onclick="window.confirmAccountReset()" class="flex-1 bg-pink-500 text-white font-bold py-3 rounded-xl shadow-lg transition hover:bg-pink-600">Sim, Resetar</button>
+                <button onclick="window.closeModal('modal-confirm-account-reset')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition text-slate-500 hover:bg-slate-200">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL NOVA MISSÃO -->
     <div id="modal-create-mission" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left">
         <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl">
@@ -1573,7 +1645,7 @@
 
     <!-- MODAL VER PARTICIPANTES SORTEIO -->
     <div id="modal-view-participants" class="hidden fixed inset-0 z-[1150] flex items-center justify-center p-4 modal-bg text-left">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl max-h-[80vh] flex flex-col">
+        <div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl max-h-[80vh] flex flex-col">
             <div class="flex justify-between items-center mb-6">
                 <h3 class="text-xl font-bold text-slate-700 uppercase tracking-tighter">Participantes</h3>
                 <span id="participants-total-count" class="bg-pink-100 text-pink-600 text-xs font-bold px-3 py-1 rounded-full">0</span>
@@ -1637,21 +1709,20 @@
         </div>
     </div>
     
-    <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir Missão?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
-    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button></div></div></div>
+    <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button></div></div></div>
 
-    <div id="modal-confirm-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
-    <div id="modal-confirm-clan-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio do Clã?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete(true)" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-clan-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-clan-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio do Clã?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete(true)" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-clan-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
-    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
-    <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3><div class="flex gap-4"><button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
+    <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3><div class="flex gap-4"><button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button><button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition leading-tight hover:bg-slate-200 text-slate-500">Não</button></div></div></div>
 
-    <!-- MODAL DE CONFIRMAÇÃO DE EXCLUSÃO DE RECRUTAMENTO (ADICIONADO PARA CORREÇÃO) -->
     <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-sm shadow-2xl transition-all">
+        <div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all">
             <h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Candidatura?</h3>
             <div class="flex gap-4">
                 <button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition leading-tight hover:bg-red-600">Sim</button>
