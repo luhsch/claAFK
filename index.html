@@ -572,18 +572,26 @@
             const reward = document.getElementById('mis-reward').value.trim();
             const tag = document.getElementById('mis-tag').value;
             if (!objective || !reward || !tag) return window.notify("Preencha todos os campos da missão.", "error", false);
+            
+            const isAdmin = currentUser && MISSION_ADMINS.includes(currentUser.name);
+
             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), {
                 objective,
                 reward,
                 tag,
-                status: 'open',
+                status: isAdmin ? 'open' : 'suggestion',
                 takenBy: null,
                 createdBy: currentUser.name,
                 createdAt: Date.now()
             });
-            window.notify("Missão criada!", "success", false);
+            window.notify(isAdmin ? "Missão criada!" : "Sugestão de missão enviada para a Luhnny!", "success", false);
             window.closeModal('modal-create-mission');
             document.getElementById('form-create-mission').reset();
+        };
+
+        window.approveMission = async (id) => {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', id), { status: 'open' });
+            window.notify("Missão aprovada!", "success");
         };
 
         window.takeMission = async (id) => {
@@ -622,6 +630,7 @@
                         tag: mission.tag,
                         takenBy: mission.takenBy,
                         createdBy: mission.createdBy,
+                        paymentConfirmed: false,
                         completedAt: Date.now()
                     });
                 }
@@ -631,19 +640,58 @@
             }
         };
 
+        window.confirmMissionPayment = async (id) => {
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'completed_missions', id), {
+                    paymentConfirmed: true
+                });
+                window.notify("Pagamento confirmado!", "success");
+            } catch (e) {
+                console.error(e);
+                window.notify("Erro ao confirmar pagamento.", "error");
+            }
+        };
+
         window.renderMissions = function() {
             const list = document.getElementById('missions-list'); if(!list) return;
             const historyList = document.getElementById('completed-missions-list'); if(!historyList) return;
+            const suggList = document.getElementById('suggested-missions-list');
+            const suggSection = document.getElementById('mission-suggestions-section');
             
             list.innerHTML = '';
             historyList.innerHTML = '';
+            if(suggList) suggList.innerHTML = '';
 
-            if (allMissions.length === 0) {
+            const canManage = currentUser && MISSION_ADMINS.includes(currentUser.name);
+
+            // Filtra sugestões
+            const suggestions = allMissions.filter(m => m.status === 'suggestion');
+            if (canManage && suggestions.length > 0) {
+                suggSection?.classList.remove('hidden');
+                suggestions.forEach(m => {
+                    suggList.innerHTML += `
+                        <div class="bg-yellow-50 border-2 border-yellow-200 p-6 rounded-3xl card-shadow flex flex-col justify-between">
+                            <div>
+                                <span class="bg-yellow-200 text-yellow-700 px-3 py-1 rounded-lg text-[10px] font-bold uppercase w-fit mb-3 block">Sugestão de ${m.createdBy}</span>
+                                <h4 class="text-lg font-bold text-slate-700 mb-2 leading-tight">${m.objective}</h4>
+                                <p class="text-sm text-pink-500 font-semibold mb-4">Recompensa: ${m.reward}</p>
+                            </div>
+                            <div class="flex gap-2 border-t border-yellow-100 pt-4">
+                                <button onclick="window.approveMission('${m.id}')" class="flex-1 bg-green-500 text-white py-2 rounded-xl font-bold text-xs uppercase shadow-md hover:bg-green-600 transition">Aprovar</button>
+                                <button onclick="window.requestDeleteMission('${m.id}')" class="px-4 bg-red-100 text-red-500 rounded-xl font-bold text-xs uppercase hover:bg-red-200 transition">Recusar</button>
+                            </div>
+                        </div>`;
+                });
+            } else {
+                suggSection?.classList.add('hidden');
+            }
+
+            const activeMissions = allMissions.filter(m => m.status !== 'suggestion');
+            if (activeMissions.length === 0) {
                 list.innerHTML = '<div class="col-span-full text-center p-8 bg-white rounded-3xl border-2 border-dashed border-pink-200 text-slate-400">Nenhuma missão disponível no momento.</div>';
             } else {
-                allMissions.sort((a,b) => b.createdAt - a.createdAt).forEach(m => {
+                activeMissions.sort((a,b) => b.createdAt - a.createdAt).forEach(m => {
                     const isTaken = m.status === 'taken';
-                    const canManage = currentUser && MISSION_ADMINS.includes(currentUser.name);
                     const isMyMission = currentUser && m.takenBy === currentUser.name;
                     let buttonHtml = '';
                     if (canManage) {
@@ -672,18 +720,37 @@
             } else {
                 allCompletedMissions.sort((a,b) => b.completedAt - a.completedAt).forEach(m => {
                     const dateStr = new Date(m.completedAt).toLocaleDateString('pt-PT');
+                    const isOwner = currentUser && m.createdBy === currentUser.name;
+                    
+                    let paymentStatusHtml = '';
+                    if (m.paymentConfirmed) {
+                        paymentStatusHtml = `
+                            <div class="bg-white px-3 py-1 rounded-lg border border-green-100 text-[10px] font-bold text-green-500 uppercase flex items-center gap-1">
+                                <i data-lucide="award" class="w-3 h-3"></i> Recompensa Paga
+                            </div>`;
+                    } else if (isOwner) {
+                        paymentStatusHtml = `
+                            <button onclick="window.confirmMissionPayment('${m.id}')" class="bg-pink-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase hover:bg-pink-600 transition shadow-sm">
+                                Confirmar Pagamento
+                            </button>`;
+                    } else {
+                        paymentStatusHtml = `
+                            <div class="bg-white px-3 py-1 rounded-lg border border-yellow-100 text-[10px] font-bold text-yellow-500 uppercase flex items-center gap-1">
+                                <i data-lucide="clock" class="w-3 h-3"></i> Aguardando Confirmação
+                            </div>`;
+                    }
+
                     historyList.innerHTML += `
                         <div class="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <div class="flex items-center gap-4">
                                 <div class="p-2 bg-green-100 text-green-600 rounded-lg"><i data-lucide="check" class="w-5 h-5"></i></div>
                                 <div>
                                     <h5 class="font-bold text-slate-700 text-sm">${m.objective}</h5>
-                                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Cumprida por: <span class="text-pink-500">${m.takenBy}</span> em ${dateStr}</p>
+                                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-tight mb-1">Recompensa: <span class="text-pink-600 font-extrabold">${m.reward}</span></p>
+                                    <p class="text-[9px] text-slate-400 font-bold uppercase tracking-tight">Cumprida por: <span class="text-pink-500">${m.takenBy}</span> | Dono: <span class="text-slate-600">${m.createdBy}</span> | Em ${dateStr}</p>
                                 </div>
                             </div>
-                            <div class="bg-white px-3 py-1 rounded-lg border border-green-100 text-[10px] font-bold text-green-500 uppercase flex items-center gap-1">
-                                <i data-lucide="award" class="w-3 h-3"></i> Recompensa Paga
-                            </div>
+                            ${paymentStatusHtml}
                         </div>
                     `;
                 });
@@ -837,7 +904,9 @@
             window.crypto.getRandomValues(randomBuffer);
             const winnerIndex = randomBuffer[0] % giv.participants.length;
             const winner = giv.participants[winnerIndex];
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'coll', id), { winner: winner, status: 'closed' });
+            // CORREÇÃO: Usar a variável coll em vez da string 'coll'
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { winner: winner, status: 'closed' });
+            window.notify(`Sorteio realizado! Vencedor: ${winner}`, "success");
         };
 
         window.requestDeleteGiveaway = (id, isClan = false) => { 
@@ -949,7 +1018,7 @@
             let controls = ''; 
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const pCount = (ev.participants || []).length;
-            const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
+            const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] font-bold bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 uppercase"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
             
             const pList = `
                 <div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2">
@@ -1212,9 +1281,19 @@
                     btnRecNav?.classList.add('hidden'); 
                     btnAddMemberManual?.classList.add('hidden');
                 }
-                if (canManageMissions) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
+                
+                // Botão de Nova Missão agora para TODOS os membros (não aliados)
+                if (!currentUser.isAlly) { 
+                    aMissionAdmin?.classList.remove('hidden'); 
+                    const btnText = canManageMissions ? '<i data-lucide="plus-circle"></i> Nova Missão' : '<i data-lucide="scroll"></i> Sugerir Missão';
+                    const missionBtn = document.querySelector('#admin-mission-controls button');
+                    if(missionBtn) missionBtn.innerHTML = btnText;
+                } else { 
+                    aMissionAdmin?.classList.add('hidden'); 
+                }
+
                 if (isEventAdmin) { aEventBtn?.classList.remove('hidden'); aGiveawayBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); aClanEventPanelBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden'); }
-                if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); aMissionBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); }
+                if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); }
             } else {
                 lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden');
                 btnRecNav?.classList.remove('hidden'); 
@@ -1381,6 +1460,15 @@
                     <i data-lucide="scroll" class="w-6 h-6 flex-shrink-0"></i>
                     <p><strong>Missões do Clã:</strong> Complete objetivos para ganhar recompensas exclusivas ajudando o clã! <b>(Máximo de 2 missões por vez)</b></p>
                 </div>
+                
+                <!-- Área de Sugestões para Admin -->
+                <div id="mission-suggestions-section" class="hidden mb-12">
+                    <h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter">
+                        <i data-lucide="message-square"></i> Sugestões de Missão (Luhnny)
+                    </h3>
+                    <div id="suggested-missions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+
                 <div id="admin-mission-controls" class="hidden mb-8 text-center">
                     <button onclick="window.openModal('modal-create-mission')" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto">
                         <i data-lucide="plus-circle"></i> Nova Missão
