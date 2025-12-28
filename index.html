@@ -43,6 +43,26 @@
         const db = getFirestore(app);
         const appId = "clan-afk";
 
+        // CONFIGURAÇÕES DE PERMISSÕES (CAPACIDADES) - SEPARADO ENTRE CLÃ E GLOBAL
+        const PERMISSIONS_LIST = [
+            { id: "MANAGE_RECRUITMENT", label: "Gerenciar Recrutamento (Aprovar/Negar)" },
+            { id: "DELETE_RECRUITMENT", label: "Excluir Pedidos de Recrutamento" },
+            { id: "MANAGE_ALLIANCES", label: "Gerenciar Alianças" },
+            { id: "MANAGE_GLOBAL_EVENTS", label: "Criar/Editar Eventos GLOBAIS" },
+            { id: "DELETE_GLOBAL_EVENTS", label: "Excluir Eventos GLOBAIS" },
+            { id: "MANAGE_CLAN_EVENTS", label: "Criar/Editar Eventos do CLÃ" },
+            { id: "DELETE_CLAN_EVENTS", label: "Excluir Eventos do CLÃ" },
+            { id: "MANAGE_MISSIONS", label: "Gerenciar Missões" },
+            { id: "DELETE_MISSIONS", label: "Excluir/Concluir Missões" },
+            { id: "MANAGE_GLOBAL_GIVEAWAYS", label: "Gerenciar Sorteios GLOBAIS" },
+            { id: "DELETE_GLOBAL_GIVEAWAYS", label: "Excluir Sorteios GLOBAIS" },
+            { id: "MANAGE_CLAN_GIVEAWAYS", label: "Gerenciar Sorteios do CLÃ" },
+            { id: "DELETE_CLAN_GIVEAWAYS", label: "Excluir Sorteios do CLÃ" },
+            { id: "MANAGE_MEMBERS", label: "Gerenciar Membros (Editar Perfis/Autorizar)" },
+            { id: "DELETE_MEMBERS", label: "Excluir Membros" },
+            { id: "ACCESS_MGMT_TAB", label: "Acessar Aba Gerenciamento" }
+        ];
+
         let currentUser = null;
         let allEvents = [];
         let allClanEvents = []; 
@@ -59,6 +79,7 @@
         let hiddenStaticMembers = []; 
         let memberDetailsOverrides = {}; 
         let isRecruitmentOpen = true; 
+        let individualPermissions = {}; // Carregado do Firestore
         
         let initialEventLoad = true;
         let initialClanEventLoad = true;
@@ -89,24 +110,33 @@
 
         // Hierarquia Administrativa Dinâmica
         let dynamicRoles = {
-            super_admins: { 
-                members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"], 
-                permissions: ["Gerenciar pedidos de recrutamento (Aprovar/Negar)", "Gerenciar alianças (Adicionar/Remover clãs)", "Autorizar membros manualmente", "Sem permissão de exclusão (Exceto Luhnny)"] 
-            },
-            event_admins: { 
-                members: ["SrLordM", "Bone"], 
-                permissions: ["Criar, editar Global Events e Sorteios", "Realizar sorteio e ver participantes", "Aprovar sugestões enviadas por membros", "Bloqueados na Área do Clã e Exclusões"] 
-            },
-            mission_admins: { 
-                members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"], 
-                permissions: ["Criar missões diretamente", "Aprovar ou recusar sugestões de missões", "Concluir missões e confirmar pagamentos"] 
-            }
+            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"], permissions: ["MANAGE_RECRUITMENT", "MANAGE_ALLIANCES", "MANAGE_MEMBERS", "ACCESS_MGMT_TAB"] },
+            event_admins: { members: ["SrLordM", "Bone"], permissions: ["MANAGE_GLOBAL_EVENTS", "MANAGE_GLOBAL_GIVEAWAYS"] },
+            mission_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"], permissions: ["MANAGE_MISSIONS"] }
         };
 
-        const getSuperAdmins = () => dynamicRoles.super_admins.members;
-        const getEventAdmins = () => dynamicRoles.event_admins.members;
-        const getMissionAdmins = () => dynamicRoles.mission_admins.members;
-        const getAllAdmins = () => [...getSuperAdmins(), ...getEventAdmins()];
+        // FUNÇÃO CENTRAL DE PERMISSÃO - AGORA RESPEITANDO INDIVIDUAIS E CARGOS
+        window.hasPermission = (permissionId) => {
+            if (!currentUser) return false;
+            if (currentUser.name === "Luhnny") return true; // Luhnny é imune e tem tudo
+
+            // 1. Verificar Permissões Individuais (Prioridade)
+            const userLower = currentUser.name.toLowerCase();
+            if (individualPermissions[userLower] && individualPermissions[userLower].includes(permissionId)) {
+                return true;
+            }
+
+            // 2. Verificar Permissões de Cargo
+            for (const roleKey in dynamicRoles) {
+                const role = dynamicRoles[roleKey];
+                if (role.members.includes(currentUser.name)) {
+                    if (Array.isArray(role.permissions) && role.permissions.includes(permissionId)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
 
         const INVITE_CODE_MEMBER = "senhadificil"; 
         const INVITE_CODE_ALLY = "123alianca";
@@ -267,8 +297,7 @@
                 if (userData.password !== pass) return window.notify("Senha incorreta.", "error", false);
                 await updateDoc(userRef, { lastLogin: Date.now() });
                 await syncUserIdentity(userData.name, userData.role);
-                const isAdmin = getAllAdmins().includes(userData.name); 
-                window.loginSuccess({ ...userData, isAdmin, isAlly: userData.role === 'ally' });
+                window.loginSuccess({ ...userData, isAlly: userData.role === 'ally' });
             } catch (e) {
                 console.error(e);
                 window.notify("Erro ao fazer login.", "error", false);
@@ -314,8 +343,7 @@
                     }
                 }
                 window.notify("Conta criada com sucesso! Fazendo login...", "success", false);
-                const isAdmin = getAllAdmins().includes(userData.name);
-                window.loginSuccess({ ...userData, isAdmin, isAlly: type === 'ally' });
+                window.loginSuccess({ ...userData, isAlly: type === 'ally' });
             } catch (e) {
                 console.error(e);
                 window.notify("Erro ao registrar.", "error", false);
@@ -385,31 +413,26 @@
                     </div>
                 ` : '';
 
-                // Renderiza Permissões Dinâmicas
-                const permsArray = Array.isArray(role.permissions) ? role.permissions : [];
-                const permsList = permsArray.map((p, idx) => `
-                    <div class="flex items-start gap-2 bg-${color}-50/30 p-2 rounded-lg border border-${color}-100/50 group">
-                        <i data-lucide="check" class="w-3 h-3 mt-0.5 text-${color}-400 flex-shrink-0"></i>
-                        <span class="text-xs text-slate-600 flex-grow">${p}</span>
-                        ${isLuhnny ? `<button onclick="window.removePermission('${roleKey}', ${idx})" class="text-red-300 hover:text-red-500 transition opacity-0 group-hover:opacity-100 leading-none">×</button>` : ''}
-                    </div>
-                `).join('');
-
-                const addPermInput = isLuhnny ? `
-                    <div class="mt-4 flex gap-2">
-                        <input type="text" id="add-perm-${roleKey}" placeholder="Nova permissão..." class="flex-1 text-[10px] p-1.5 border rounded-lg outline-none focus:border-${color}-300">
-                        <button onclick="window.addPermission('${roleKey}')" class="bg-slate-700 text-white px-2 py-1 rounded-lg text-[10px] font-bold shadow-sm hover:bg-black transition">ADD</button>
-                    </div>
-                ` : '';
+                // Lista de Checkboxes de Permissões
+                const permsCheckboxes = PERMISSIONS_LIST.map(p => {
+                    const hasP = Array.isArray(role.permissions) && role.permissions.includes(p.id);
+                    return `
+                        <label class="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded-lg transition cursor-pointer">
+                            <input type="checkbox" onchange="window.toggleRolePermission('${roleKey}', '${p.id}')" ${hasP ? 'checked' : ''} ${!isLuhnny ? 'disabled' : ''} class="w-3.5 h-3.5 rounded border-pink-300 text-pink-600 focus:ring-pink-500">
+                            <span class="text-[11px] text-slate-600">${p.label}</span>
+                        </label>
+                    `;
+                }).join('');
 
                 container.innerHTML += `
                     <div class="bg-white p-6 rounded-2xl border-2 border-${color}-100 flex flex-col card-shadow">
                         <h3 class="font-bold text-${color}-600 uppercase text-sm mb-6 flex items-center gap-2 border-b border-${color}-50 pb-2"><i data-lucide="${icon}" class="w-4 h-4"></i> ${label}</h3>
                         
-                        <div class="space-y-2 flex-grow">
+                        <div class="space-y-1 flex-grow">
                             <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Permissões do Cargo:</span>
-                            ${permsList}
-                            ${addPermInput}
+                            <div class="space-y-1 max-h-[180px] overflow-y-auto pr-1">
+                                ${permsCheckboxes}
+                            </div>
                         </div>
 
                         <div class="pt-6 border-t border-${color}-50 mt-6">
@@ -421,6 +444,20 @@
                 `;
             });
             lucide.createIcons();
+        };
+
+        window.toggleRolePermission = async (roleKey, permId) => {
+            if (currentUser?.name !== "Luhnny") return;
+            const currentPerms = Array.isArray(dynamicRoles[roleKey].permissions) ? [...dynamicRoles[roleKey].permissions] : [];
+            let updatedPerms;
+            if (currentPerms.includes(permId)) {
+                updatedPerms = currentPerms.filter(p => p !== permId);
+            } else {
+                updatedPerms = [...currentPerms, permId];
+            }
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'permissions', roleKey), { ...dynamicRoles[roleKey], permissions: updatedPerms });
+            await saveLog("Alteração de Permissões", `Alterou permissão ${permId} no cargo ${roleKey}.`);
+            window.notify("Permissão do cargo atualizada!", "success");
         };
 
         window.removeAdminRole = async (roleKey, nick) => {
@@ -445,28 +482,34 @@
             window.notify(`${nick} adicionado a ${roleKey}`, "success");
         };
 
-        window.removePermission = async (roleKey, index) => {
-            if (currentUser?.name !== "Luhnny") return;
-            const currentPerms = [...(dynamicRoles[roleKey].permissions || [])];
-            const removed = currentPerms.splice(index, 1);
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'permissions', roleKey), { ...dynamicRoles[roleKey], permissions: currentPerms });
-            await saveLog("Permissão Removida", `Removeu a permissão: "${removed}" de ${roleKey}.`);
-            window.notify("Permissão removida!", "info");
+        // GESTÃO INDIVIDUAL DE PERMISSÕES
+        window.openIndividualPermissions = (nick) => {
+            const nickLower = nick.toLowerCase();
+            const userPerms = individualPermissions[nickLower] || [];
+            document.getElementById('indiv-perm-nick').innerText = nick;
+            const listContainer = document.getElementById('indiv-perms-checkboxes');
+            listContainer.innerHTML = PERMISSIONS_LIST.map(p => `
+                <label class="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl transition cursor-pointer border border-slate-100">
+                    <input type="checkbox" onchange="window.toggleIndividualPermission('${nick}', '${p.id}')" ${userPerms.includes(p.id) ? 'checked' : ''} class="w-4 h-4 rounded border-pink-300 text-pink-600 focus:ring-pink-500">
+                    <span class="text-sm text-slate-700 font-medium">${p.label}</span>
+                </label>
+            `).join('');
+            window.openModal('modal-individual-permissions');
         };
 
-        window.addPermission = async (roleKey) => {
+        window.toggleIndividualPermission = async (nick, permId) => {
             if (currentUser?.name !== "Luhnny") return;
-            const input = document.getElementById(`add-perm-${roleKey}`);
-            const text = input.value.trim();
-            if (!text) return;
-            
-            const currentPerms = Array.isArray(dynamicRoles[roleKey].permissions) ? [...dynamicRoles[roleKey].permissions] : [];
-            const updatedPerms = [...currentPerms, text];
-            
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'permissions', roleKey), { ...dynamicRoles[roleKey], permissions: updatedPerms });
-            await saveLog("Permissão Adicionada", `Adicionou permissão em ${roleKey}: "${text}".`);
-            input.value = "";
-            window.notify("Nova permissão adicionada!", "success");
+            const nickLower = nick.toLowerCase();
+            const currentPerms = individualPermissions[nickLower] || [];
+            let updatedPerms;
+            if (currentPerms.includes(permId)) {
+                updatedPerms = currentPerms.filter(p => p !== permId);
+            } else {
+                updatedPerms = [...currentPerms, permId];
+            }
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'individual_permissions', nickLower), { permissions: updatedPerms, nick: nick });
+            await saveLog("Permissão Individual", `Alterou permissões de ${nick}: ${permId}`);
+            window.notify(`Acesso de ${nick} atualizado!`, "success");
         };
 
         window.addMemberManual = async () => {
@@ -534,6 +577,9 @@
             if(countEl) countEl.innerText = `Total: ${combinedMembers.length} membros registrados`;
             grid.innerHTML = '';
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
+            const canManageMembers = window.hasPermission('MANAGE_MEMBERS');
+            const canDeleteMembers = window.hasPermission('DELETE_MEMBERS');
+
             combinedMembers.forEach(m => {
                 let tagsHtml = '';
                 if(m.role) tagsHtml += `<span class="px-3 py-1 bg-pink-600 text-white text-[10px] font-bold uppercase rounded-full">${m.role}</span>`;
@@ -550,9 +596,14 @@
                     tagsHtml += `<span class="px-2 py-1 ${color} text-[10px] uppercase rounded-full font-bold">${t}</span>`;
                 });
                 let adminBtns = '';
-                if (isLuhnny) {
+                if (canManageMembers || canDeleteMembers || isLuhnny) {
                     const mData = JSON.stringify(m).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-                    adminBtns = `<div class="absolute top-4 right-4 flex gap-1 z-10"><button title="Resetar Senha" onclick="window.requestResetAccount('${m.nick}')" class="p-1.5 bg-white text-pink-400 hover:text-pink-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="key" class="w-4 h-4"></i></button><button onclick='window.openEditMemberModal(${mData})' class="p-1.5 bg-white text-blue-400 hover:text-blue-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button><button onclick='window.requestDeleteMember(${mData})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>`;
+                    adminBtns = `<div class="absolute top-4 right-4 flex gap-1 z-10">
+                        ${isLuhnny ? `<button title="Permissões" onclick="window.openIndividualPermissions('${m.nick}')" class="p-1.5 bg-white text-purple-400 hover:text-purple-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="shield" class="w-4 h-4"></i></button>` : ''}
+                        ${isLuhnny ? `<button title="Resetar Senha" onclick="window.requestResetAccount('${m.nick}')" class="p-1.5 bg-white text-pink-400 hover:text-pink-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="key" class="w-4 h-4"></i></button>` : ''}
+                        ${canManageMembers ? `<button onclick='window.openEditMemberModal(${mData})' class="p-1.5 bg-white text-blue-400 hover:text-blue-600 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="pencil" class="w-4 h-4"></i></button>` : ''}
+                        ${canDeleteMembers ? `<button onclick='window.requestDeleteMember(${mData})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                    </div>`;
                 }
                 const card = `<div class="relative bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">${adminBtns}<div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold ${m.role === 'Líder' ? 'text-pink-600' : 'text-pink-500'} flex items-center gap-2">${m.nick} ${m.role === 'Líder' ? '<i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>' : ''}</h3><img src="${m.img}" onerror="this.src='https://ui-avatars.com/api/?name=${m.nick}&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: ${m.aniv}</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: ${m.disp}</div></div><div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">${tagsHtml}</div></div>`;
                 grid.innerHTML += card;
@@ -633,10 +684,10 @@
             const reward = document.getElementById('mis-reward').value.trim();
             const tag = document.getElementById('mis-tag').value;
             if (!objective || !reward || !tag) return window.notify("Preencha todos os campos da missão.", "error", false);
-            const isAdmin = currentUser && getMissionAdmins().includes(currentUser.name);
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), { objective, reward, tag, status: isAdmin ? 'open' : 'suggestion', takenBy: null, createdBy: currentUser.name, createdAt: Date.now() });
-            await saveLog(isAdmin ? "Criação de Missão" : "Sugestão de Missão", `${objective} - Recompensa: ${reward}`);
-            window.notify(isAdmin ? "Missão criada!" : "Sugestão de missão enviada para a Luhnny!", "success", false);
+            const canManageMissions = window.hasPermission('MANAGE_MISSIONS');
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'missions'), { objective, reward, tag, status: canManageMissions ? 'open' : 'suggestion', takenBy: null, createdBy: currentUser.name, createdAt: Date.now() });
+            await saveLog(canManageMissions ? "Criação de Missão" : "Sugestão de Missão", `${objective} - Recompensa: ${reward}`);
+            window.notify(canManageMissions ? "Missão criada!" : "Sugestão de missão enviada para a Luhnny!", "success", false);
             window.closeModal('modal-create-mission');
             document.getElementById('form-create-mission').reset();
         };
@@ -699,8 +750,8 @@
             list.innerHTML = '';
             historyList.innerHTML = '';
             if(suggList) suggList.innerHTML = '';
-            const canManage = currentUser && getMissionAdmins().includes(currentUser.name);
-            const isSuperAdmin = currentUser && getSuperAdmins().includes(currentUser.name);
+            const canManage = window.hasPermission('MANAGE_MISSIONS');
+            const canDeleteMissions = window.hasPermission('DELETE_MISSIONS');
             const suggestions = allMissions.filter(m => m.status === 'suggestion');
             if (canManage && suggestions.length > 0) {
                 suggSection?.classList.remove('hidden');
@@ -715,7 +766,7 @@
                     const isTaken = m.status === 'taken';
                     const isMyMission = currentUser && m.takenBy === currentUser.name;
                     let buttonHtml = '';
-                    if (isSuperAdmin) { buttonHtml = `<button onclick="window.requestDeleteMission('${m.id}')" class="w-full mt-4 py-2 rounded-xl border-2 border-red-100 text-red-400 font-bold hover:bg-red-50 transition uppercase text-xs">Concluir / Excluir</button>`; } 
+                    if (canDeleteMissions) { buttonHtml = `<button onclick="window.requestDeleteMission('${m.id}')" class="w-full mt-4 py-2 rounded-xl border-2 border-red-100 text-red-400 font-bold hover:bg-red-50 transition uppercase text-xs">Concluir / Excluir</button>`; } 
                     else if (isTaken) {
                         if (isMyMission) { buttonHtml = `<div class="grid grid-cols-2 gap-2 mt-4"><button onclick="window.requestDeleteMission('${m.id}')" class="py-2 bg-green-500 text-white rounded-xl font-bold text-xs uppercase shadow-md hover:bg-green-600 transition">Concluído</button><button onclick="window.quitMission('${m.id}')" class="py-2 bg-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase hover:bg-slate-300 transition">Desistir</button></div>`; } 
                         else { buttonHtml = `<div class="w-full mt-4 py-2 bg-slate-50 text-slate-400 rounded-xl font-bold text-xs uppercase text-center border">Em andamento</div>`; }
@@ -736,7 +787,7 @@
                     const isOwner = currentUser && m.createdBy === currentUser.name;
                     let paymentStatusHtml = '';
                     if (m.paymentConfirmed) { paymentStatusHtml = `<div class="bg-white px-3 py-1 rounded-lg border border-green-100 text-[10px] font-bold text-green-500 uppercase flex items-center gap-1"><i data-lucide="award" class="w-3 h-3"></i> Recompensa Paga</div>`; } 
-                    else if (isOwner) { paymentStatusHtml = `<button onclick="window.confirmMissionPayment('${m.id}')" class="bg-pink-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase hover:bg-pink-600 transition shadow-sm">Confirmar Pagamento</button>`; } 
+                    else if (isOwner || canManage) { paymentStatusHtml = `<button onclick="window.confirmMissionPayment('${m.id}')" class="bg-pink-500 text-white px-3 py-1 rounded-lg text-[10px] font-bold uppercase hover:bg-pink-600 transition shadow-sm">Confirmar Pagamento</button>`; } 
                     else { paymentStatusHtml = `<div class="bg-white px-3 py-1 rounded-lg border border-yellow-100 text-[10px] font-bold text-yellow-500 uppercase flex items-center gap-1"><i data-lucide="clock" class="w-3 h-3"></i> Aguardando Confirmação</div>`; }
                     historyList.innerHTML += `<div class="bg-slate-50/80 p-4 rounded-2xl border border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4"><div class="flex items-center gap-4"><div class="p-2 bg-green-100 text-green-600 rounded-lg"><i data-lucide="check" class="w-5 h-5"></i></div><div><h5 class="font-bold text-slate-700 text-sm">${m.objective}</h5><p class="text-[10px] text-slate-500 font-bold uppercase tracking-tight mb-1">Recompensa: <span class="text-pink-600 font-extrabold">${m.reward}</span></p><p class="text-[9px] text-slate-400 font-bold uppercase tracking-tight">Cumprida por: <span class="text-pink-500">${m.takenBy}</span> | Dono: <span class="text-slate-600">${m.createdBy}</span> | Em ${dateStr}</p></div></div>${paymentStatusHtml}</div>`;
                 });
@@ -753,15 +804,18 @@
             const data = { prize, date, time };
             const coll = isClan ? 'clan_giveaways' : 'giveaways';
             const editId = isClan ? editingClanGiveawayId : editingGiveawayId;
-            const isAdmin = getAllAdmins().includes(currentUser.name);
+            
+            // SEPARADO: Permissão CLÃ ou GLOBAL
+            const canManage = isClan ? window.hasPermission('MANAGE_CLAN_GIVEAWAYS') : window.hasPermission('MANAGE_GLOBAL_GIVEAWAYS');
+
             if (editId) {
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, editId), data);
                 await saveLog("Edição de Sorteio", `Editou prêmio para: ${prize} (${isClan ? 'Clã' : 'Global'})`);
                 window.notify("Sorteio Atualizado!", "success", false);
             } else {
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', coll), { ...data, participants: [], winner: null, status: isClan ? (isAdmin ? 'open' : 'suggestion') : 'open', createdBy: currentUser.name, createdAt: Date.now() });
-                await saveLog(isClan && !isAdmin ? "Sugestão de Sorteio" : "Criação de Sorteio", `Prêmio: ${prize} (${isClan ? 'Clã' : 'Global'})`);
-                window.notify(isClan && !isAdmin ? "Sugestão de sorteio enviada!" : "Sorteio Criado!", "success", false);
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', coll), { ...data, participants: [], winner: null, status: canManage ? 'open' : 'suggestion', createdBy: currentUser.name, createdAt: Date.now() });
+                await saveLog(isClan && !canManage ? "Sugestão de Sorteio" : "Criação de Sorteio", `Prêmio: ${prize} (${isClan ? 'Clã' : 'Global'})`);
+                window.notify(isClan && !canManage ? "Sugestão de sorteio enviada!" : "Sorteio Criado!", "success", false);
             }
             window.closeModal(isClan ? 'modal-create-clan-giveaway' : 'modal-create-giveaway');
             document.getElementById(isClan ? 'form-create-clan-giveaway' : 'form-create-giveaway').reset();
@@ -802,7 +856,8 @@
         };
 
         window.removeEventParticipant = async (id, nick, isClan) => {
-            if (currentUser?.name !== "Luhnny") return;
+            const canManage = isClan ? window.hasPermission('MANAGE_CLAN_EVENTS') : window.hasPermission('MANAGE_GLOBAL_EVENTS');
+            if (!canManage) return;
             const list = isClan ? allClanEvents : allEvents;
             const coll = isClan ? 'clan_events' : 'events';
             const ev = list.find(e => e.id === id);
@@ -815,7 +870,8 @@
         };
 
         window.removeGiveawayParticipant = async (id, nick, isClan) => {
-            if (currentUser?.name !== "Luhnny") return;
+            const canManage = isClan ? window.hasPermission('MANAGE_CLAN_GIVEAWAYS') : window.hasPermission('MANAGE_GLOBAL_GIVEAWAYS');
+            if (!canManage) return;
             const list = isClan ? allClanGiveaways : allGiveaways;
             const coll = isClan ? 'clan_giveaways' : 'giveaways';
             const giv = list.find(g => g.id === id);
@@ -833,12 +889,12 @@
             const g = list.find(x => x.id === id);
             const listContainer = document.getElementById('participants-list-content');
             const totalEl = document.getElementById('participants-total-count');
-            const isLuhnny = currentUser && currentUser.name === "Luhnny";
+            const canKick = isClan ? window.hasPermission('MANAGE_CLAN_GIVEAWAYS') : window.hasPermission('MANAGE_GLOBAL_GIVEAWAYS');
             listContainer.innerHTML = '';
             if (g && g.participants && g.participants.length > 0) {
                 totalEl.innerText = `${g.participants.length} Participantes`;
                 g.participants.forEach(p => {
-                    listContainer.innerHTML += `<div class="flex items-center gap-3 p-3 bg-pink-50 rounded-xl border border-pink-100"><img src="https://ui-avatars.com/api/?name=${p}&background=fbcfe8&color=db2777" class="w-8 h-8 rounded-full"><span class="font-bold text-slate-700">${p}</span>${isLuhnny ? `<button onclick="window.removeGiveawayParticipant('${g.id}', '${p}', ${isClan})" class="ml-auto p-1.5 text-red-300 hover:text-red-500 transition"><i data-lucide="user-x" class="w-4 h-4"></i></button>` : ''}</div>`;
+                    listContainer.innerHTML += `<div class="flex items-center gap-3 p-3 bg-pink-50 rounded-xl border border-pink-100"><img src="https://ui-avatars.com/api/?name=${p}&background=fbcfe8&color=db2777" class="w-8 h-8 rounded-full"><span class="font-bold text-slate-700">${p}</span>${canKick ? `<button onclick="window.removeGiveawayParticipant('${g.id}', '${p}', ${isClan})" class="ml-auto p-1.5 text-red-300 hover:text-red-500 transition"><i data-lucide="user-x" class="w-4 h-4"></i></button>` : ''}</div>`;
                 });
             } else {
                 totalEl.innerText = "0 Participantes";
@@ -865,9 +921,9 @@
             const coll = isClan ? 'clan_giveaways' : 'giveaways';
             const giv = list.find(g => g.id === id);
             if (!giv) return;
-            const isSuperAdmin = currentUser && getSuperAdmins().includes(currentUser.name);
+            const canDraw = isClan ? window.hasPermission('MANAGE_CLAN_GIVEAWAYS') : window.hasPermission('MANAGE_GLOBAL_GIVEAWAYS');
             const isCreator = currentUser && (giv.createdBy === currentUser.name);
-            if (!isSuperAdmin && !isCreator) return window.notify("Apenas a liderança ou o criador podem realizar o sorteio.", "error", false);
+            if (!canDraw && !isCreator) return window.notify("Apenas a liderança ou o criador podem realizar o sorteio.", "error", false);
             if (!giv.participants || giv.participants.length === 0) return window.notify("Nenhum participante para sortear.", "error", false);
             try {
                 const randomBuffer = new Uint32Array(1);
@@ -902,30 +958,32 @@
             const list = document.getElementById(listId); if(!list) return;
             list.innerHTML = '';
             const dataList = isClan ? allClanGiveaways : allGiveaways;
-            const isSuperAdmin = currentUser && getSuperAdmins().includes(currentUser.name);
-            const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            const isAdminOfThisSection = isClan ? isSuperAdmin : (currentUser && getAllAdmins().includes(currentUser.name));
-            const visibleList = isClan && !isAdminOfThisSection ? dataList.filter(g => g.status !== 'suggestion' || g.createdBy === currentUser?.name) : dataList;
+            
+            // Permissões separadas por tipo de sorteio
+            const canManage = isClan ? window.hasPermission('MANAGE_CLAN_GIVEAWAYS') : window.hasPermission('MANAGE_GLOBAL_GIVEAWAYS');
+            const canDelete = isClan ? window.hasPermission('DELETE_CLAN_GIVEAWAYS') : window.hasPermission('DELETE_GLOBAL_GIVEAWAYS');
+            
+            const visibleList = isClan && !canManage ? dataList.filter(g => g.status !== 'suggestion' || g.createdBy === currentUser?.name) : dataList;
             if (visibleList.length === 0) { list.innerHTML = `<div class="col-span-full text-center p-12 bg-white rounded-3xl border-2 border-dashed border-${isClan ? 'purple' : 'pink'}-200 text-slate-400 font-medium">Nenhum sorteio ${isClan ? 'do clã ' : ''}ativo no momento. Fique atento!</div>`; return; }
             visibleList.sort((a,b) => (a.status === 'open' ? -1 : 1) || b.createdAt - a.createdAt).forEach(g => {
                 const isParticipant = currentUser && (g.participants || []).includes(currentUser.name);
                 const hasWinner = g.winner !== null;
                 const isSuggestion = g.status === 'suggestion';
                 const pCount = (g.participants || []).length;
-                const isCreator = currentUser && (g.createdBy === currentUser.name || isLuhnny);
+                const isCreator = currentUser && (g.createdBy === currentUser.name);
                 let actionArea = '';
                 if (isSuggestion) { 
-                    if (isAdminOfThisSection) { actionArea = `<div class="mt-6"><button onclick="window.approveClanGiveaway('${g.id}')" class="w-full py-3 rounded-xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 transition uppercase text-xs">Aprovar Sorteio</button></div>`; } 
+                    if (canManage) { actionArea = `<div class="mt-6"><button onclick="window.approveClanGiveaway('${g.id}')" class="w-full py-3 rounded-xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 transition uppercase text-xs">Aprovar Sorteio</button></div>`; } 
                     else { actionArea = `<div class="mt-6 p-3 bg-yellow-50 text-yellow-600 rounded-xl border border-yellow-100 text-center text-xs font-bold uppercase">Aguardando aprovação da Luhnny</div>`; } 
                 } 
                 else if (hasWinner) { actionArea = `<div class="mt-6 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-200 text-center"><p class="text-xs font-bold text-yellow-600 uppercase mb-1">O jogador que ganhou é:</p><p class="text-2xl font-extrabold text-slate-800 flex justify-center items-center gap-2"><i data-lucide="trophy" class="w-6 h-6 text-yellow-500"></i> ${g.winner}</p></div>`; } 
                 else {
                     let joinBtn = currentUser && !isParticipant ? `<button onclick="window.joinGiveaway('${g.id}', ${isClan})" class="w-full py-3 rounded-xl ${isClan ? 'bg-purple-500 hover:bg-purple-600' : 'pink-gradient'} text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>` : currentUser && isParticipant ? `<div class="w-full py-3 rounded-xl bg-green-50 text-green-600 font-bold border border-green-200 text-center flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> Você está participando</div>` : `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
-                    let drawBtn = (isSuperAdmin || isCreator) && pCount > 0 ? `<div class="mt-3 flex gap-2"><button onclick="window.runGiveawayDraw('${g.id}', ${isClan})" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button><button onclick="window.viewParticipants('${g.id}', ${isClan})" class="px-4 py-3 rounded-xl bg-${isClan ? 'purple' : 'pink'}-100 text-${isClan ? 'purple' : 'pink'}-600 font-bold shadow-sm hover:bg-${isClan ? 'purple' : 'pink'}-200 transition"><i data-lucide="eye"></i></button></div>` : (isSuperAdmin || isCreator) && pCount === 0 ? `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>` : isAdminOfThisSection ? `<button onclick="window.viewParticipants('${g.id}', ${isClan})" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>` : '';
+                    let drawBtn = (canManage || isCreator) && pCount > 0 ? `<div class="mt-3 flex gap-2"><button onclick="window.runGiveawayDraw('${g.id}', ${isClan})" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button><button onclick="window.viewParticipants('${g.id}', ${isClan})" class="px-4 py-3 rounded-xl bg-${isClan ? 'purple' : 'pink'}-100 text-${isClan ? 'purple' : 'pink'}-600 font-bold shadow-sm hover:bg-${isClan ? 'purple' : 'pink'}-200 transition"><i data-lucide="eye"></i></button></div>` : (canManage || isCreator) && pCount === 0 ? `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>` : canManage ? `<button onclick="window.viewParticipants('${g.id}', ${isClan})" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>` : '';
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
                 }
-                let delBtn = isLuhnny ? `<button onclick="window.requestDeleteGiveaway('${g.id}', ${isClan})" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '';
-                let editBtn = (isAdminOfThisSection || isCreator) ? `<button onclick="window.editGiveaway('${g.id}', ${isClan})" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button>` : '';
+                let delBtn = canDelete ? `<button onclick="window.requestDeleteGiveaway('${g.id}', ${isClan})" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '';
+                let editBtn = (canManage || isCreator) ? `<button onclick="window.editGiveaway('${g.id}', ${isClan})" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button>` : '';
                 let adminControls = (editBtn || delBtn) ? `<div class="absolute top-4 right-4 flex gap-2">${editBtn}${delBtn}</div>` : '';
                 list.innerHTML += `<div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : isSuggestion ? 'border-yellow-200 border-dashed' : isClan ? 'border-purple-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">${adminControls}<div><div class="flex items-center gap-2 mb-2 text-${isClan ? 'purple' : 'pink'}-500 font-bold text-xs uppercase tracking-wider"><i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}</div><h3 class="text-2xl font-extrabold text-slate-800 mb-1">${g.prize}</h3><p class="text-sm text-slate-500 font-medium">Sorteio organizado por ${g.createdBy}</p><div class="mt-4 flex items-center gap-2 text-sm text-slate-600 font-semibold bg-slate-50 p-2 rounded-lg inline-block"><i data-lucide="users" class="w-4 h-4 text-${isClan ? 'purple' : 'pink'}-400"></i> ${pCount} Participantes</div></div>${actionArea}</div>`;
             });
@@ -934,15 +992,15 @@
 
         window.createEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
-            const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            const isEventAdmin = currentUser && getAllAdmins().includes(currentUser.name);
+            const canManage = window.hasPermission('MANAGE_GLOBAL_EVENTS');
+            const canDelete = window.hasPermission('DELETE_GLOBAL_EVENTS');
             let controls = '';
             const pCount = (ev.participants || []).length;
-            const creditText = (ev.suggestedBy && !getAllAdmins().includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold uppercase"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
-            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">${p}${isLuhnny ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${false})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+            const creditText = (ev.suggestedBy && ev.suggestedBy !== "Luhnny") ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold uppercase"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
+            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">${p}${canManage ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${false})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
-            if (isEventAdmin) {
-                let deleteControl = isLuhnny ? `<button onclick="window.requestDeleteEvent('${ev.id}')" class="${type === 'suggestion' ? 'text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg' : 'p-1 text-red-300'}">${type === 'suggestion' ? 'Rejeitar' : '<i data-lucide="trash-2" class="w-4 h-4"></i>'}</button>` : '';
+            if (canManage) {
+                let deleteControl = canDelete ? `<button onclick="window.requestDeleteEvent('${ev.id}')" class="${type === 'suggestion' ? 'text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg' : 'p-1 text-red-300'}">${type === 'suggestion' ? 'Rejeitar' : '<i data-lucide="trash-2" class="w-4 h-4"></i>'}</button>` : '';
                 if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button>${deleteControl}</div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button>${deleteControl}</div>${pList}`;
             } else if (currentUser && !currentUser.isAlly && (type === 'active' || type === 'history')) { controls = pList; }
@@ -953,7 +1011,8 @@
             const actC = document.getElementById('active-events-list'); const histC = document.getElementById('history-events-list'); const suggC = document.getElementById('suggested-events-list'); const suggS = document.getElementById('suggestions-section');
             if(!actC) return; actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
             const actives = allEvents.filter(e => e.status === 'active'); const history = allEvents.filter(e => e.status === 'ended'); const suggestions = allEvents.filter(e => e.status === 'suggestion');
-            if (currentUser && getAllAdmins().includes(currentUser.name) && suggestions.length > 0) { suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createEventCard(ev, 'suggestion')); } else suggS?.classList.add('hidden');
+            const canManage = window.hasPermission('MANAGE_GLOBAL_EVENTS');
+            if (canManage && suggestions.length > 0) { suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createEventCard(ev, 'suggestion')); } else suggS?.classList.add('hidden');
             if (actives.length === 0) document.getElementById('no-active-message')?.classList.remove('hidden'); else { document.getElementById('no-active-message')?.classList.add('hidden'); actives.forEach(ev => actC.innerHTML += window.createEventCard(ev, 'active')); }
             if(histC) history.forEach(ev => histC.innerHTML += window.createEventCard(ev, 'history'));
             lucide.createIcons();
@@ -961,16 +1020,16 @@
 
         window.createClanEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
-            const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            const isSuperAdmin = currentUser && getSuperAdmins().includes(currentUser.name);
+            const canManage = window.hasPermission('MANAGE_CLAN_EVENTS');
+            const canDelete = window.hasPermission('DELETE_CLAN_EVENTS');
             let controls = ''; 
             const pCount = (ev.participants || []).length;
             const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] font-bold bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 uppercase"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
-            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">${p}${isLuhnny ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${true})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
+            const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">${p}${canManage ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${true})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
-            if (isSuperAdmin) {
-                let deleteControl = isLuhnny ? `<button onclick="window.deleteClanEvent('${ev.id}')" class="${type === 'suggestion' ? 'text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg' : 'p-1 text-red-300'}"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '';
-                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button>${isLuhnny ? `<button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button>` : ''}</div>`;
+            if (canManage) {
+                let deleteControl = canDelete ? `<button onclick="window.deleteClanEvent('${ev.id}')" class="${type === 'suggestion' ? 'text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg' : 'p-1 text-red-300'}"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '';
+                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button>${canDelete ? `<button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button>` : ''}</div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatusInternal('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button>${deleteControl}</div>${pList}`;
             } else { controls = pList; }
             return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanEventJoin('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
@@ -980,23 +1039,23 @@
             const actC = document.getElementById('clan-active-events-list'); const histC = document.getElementById('clan-history-events-list'); const suggC = document.getElementById('clan-suggested-events-list'); const suggS = document.getElementById('clan-suggestions-section');
             if(!actC) return; actC.innerHTML = ''; if(histC) histC.innerHTML = ''; if(suggC) suggC.innerHTML = '';
             const actives = allClanEvents.filter(e => e.status === 'active'); const history = allClanEvents.filter(e => e.status === 'ended'); const suggestions = allClanEvents.filter(e => e.status === 'suggestion');
-            const isSuperAdmin = currentUser && getSuperAdmins().includes(currentUser.name);
-            if (isSuperAdmin && suggestions.length > 0) { suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createClanEventCard(ev, 'suggestion')); } else suggS?.classList.add('hidden');
+            const canManage = window.hasPermission('MANAGE_CLAN_EVENTS');
+            if (canManage && suggestions.length > 0) { suggS?.classList.remove('hidden'); suggestions.forEach(ev => suggC.innerHTML += window.createClanEventCard(ev, 'suggestion')); } else suggS?.classList.add('hidden');
             if (actives.length === 0) document.getElementById('clan-no-active-message')?.classList.remove('hidden'); else { document.getElementById('clan-no-active-message')?.classList.add('hidden'); actives.forEach(ev => actC.innerHTML += window.createClanEventCard(ev, 'active')); }
             if(histC) history.forEach(ev => histC.innerHTML += window.createClanEventCard(ev, 'history'));
             lucide.createIcons();
         };
 
         window.publishClanEventData = async () => {
-            const isLuhnny = currentUser && currentUser.name === 'Luhnny';
-            const data = { title: document.getElementById('clan-ev-title').value, theme: document.getElementById('clan-ev-theme').value, date: document.getElementById('clan-ev-date').value, time: document.getElementById('clan-ev-time').value, location: document.getElementById('clan-ev-loc').value || "Servidor bawMC", prizes: [document.getElementById('clan-ev-p1').value, document.getElementById('clan-ev-p2').value, document.getElementById('clan-ev-p3').value], rules: document.getElementById('clan-ev-rules').value, status: isLuhnny ? 'active' : 'suggestion', suggestedBy: (editingClanEventId && editingClanEventAuthor) ? editingClanEventAuthor : currentUser.name, participants: [], createdAt: Date.now() };
+            const canManage = window.hasPermission('MANAGE_CLAN_EVENTS');
+            const data = { title: document.getElementById('clan-ev-title').value, theme: document.getElementById('clan-ev-theme').value, date: document.getElementById('clan-ev-date').value, time: document.getElementById('clan-ev-time').value, location: document.getElementById('clan-ev-loc').value || "Servidor bawMC", prizes: [document.getElementById('clan-ev-p1').value, document.getElementById('clan-ev-p2').value, document.getElementById('clan-ev-p3').value], rules: document.getElementById('clan-ev-rules').value, status: canManage ? 'active' : 'suggestion', suggestedBy: (editingClanEventId && editingClanEventAuthor) ? editingClanEventAuthor : currentUser.name, participants: [], createdAt: Date.now() };
             if (editingClanEventId) {
-                if (isLuhnny) data.status = 'active'; const oldEvent = allClanEvents.find(e => e.id === editingClanEventId); if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
+                if (canManage) data.status = 'active'; const oldEvent = allClanEvents.find(e => e.id === editingClanEventId); if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', editingClanEventId), data); 
                 await saveLog("Edição de Evento (Clã)", `Editou evento: ${data.title}`);
                 editingClanEventId = null; editingClanEventAuthor = null;
-            } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), data); await saveLog(isLuhnny ? "Criação de Evento (Clã)" : "Sugestão de Evento (Clã)", `Evento: ${data.title}`); }
-            window.closeModal('modal-clan-event'); window.notify(isLuhnny ? "Evento do Clã Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
+            } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'clan_events'), data); await saveLog(canManage ? "Criação de Evento (Clã)" : "Sugestão de Evento (Clã)", `Evento: ${data.title}`); }
+            window.closeModal('modal-clan-event'); window.notify(canManage ? "Evento do Clã Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
         };
         
         window.approveClanEventInternal = async (id) => { const ev = allClanEvents.find(e => e.id === id); await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'clan_events', id), { status: 'active' }); await saveLog("Aprovação de Evento (Clã)", `Aprovou evento: ${ev?.title}`); window.notify("Evento do Clã aprovado!", "success", false); };
@@ -1007,15 +1066,15 @@
         window.openCreateClanEventModal = () => { editingClanEventId = null; editingClanEventAuthor = null; document.getElementById('modal-clan-event-form').reset(); window.openModal('modal-clan-event'); };
 
         window.publishClanEvent = async () => {
-            const isAdmin = getAllAdmins().includes(currentUser.name);
-            const data = { title: document.getElementById('ev-title').value, theme: document.getElementById('ev-theme').value, date: document.getElementById('ev-date').value, time: document.getElementById('ev-time').value, location: document.getElementById('ev-loc').value || "Servidor bawMC", prizes: [document.getElementById('ev-p1').value, document.getElementById('ev-p2').value, document.getElementById('ev-p3').value], rules: document.getElementById('ev-rules').value, status: isAdmin ? 'active' : 'suggestion', suggestedBy: (editingEventId && editingEventAuthor) ? editingEventAuthor : currentUser.name, participants: [], createdAt: Date.now() };
+            const canManage = window.hasPermission('MANAGE_GLOBAL_EVENTS');
+            const data = { title: document.getElementById('ev-title').value, theme: document.getElementById('ev-theme').value, date: document.getElementById('ev-date').value, time: document.getElementById('ev-time').value, location: document.getElementById('ev-loc').value || "Servidor bawMC", prizes: [document.getElementById('ev-p1').value, document.getElementById('ev-p2').value, document.getElementById('ev-p3').value], rules: document.getElementById('ev-rules').value, status: canManage ? 'active' : 'suggestion', suggestedBy: (editingEventId && editingEventAuthor) ? editingEventAuthor : currentUser.name, participants: [], createdAt: Date.now() };
             if (editingEventId) {
-                if (isAdmin) data.status = 'active'; const oldEvent = allEvents.find(e => e.id === editingEventId); if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
+                if (canManage) data.status = 'active'; const oldEvent = allEvents.find(e => e.id === editingEventId); if (oldEvent && oldEvent.participants) data.participants = oldEvent.participants;
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', editingEventId), data); 
                 await saveLog("Edição de Evento (Global)", `Editou evento: ${data.title}`);
                 editingEventId = null; editingEventAuthor = null;
-            } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data); await saveLog(isAdmin ? "Criação de Evento (Global)" : "Sugestão de Evento (Global)", `Evento: ${data.title}`); }
-            window.closeModal('modal-admin-event'); window.notify(isAdmin ? "Evento Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
+            } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), data); await saveLog(canManage ? "Criação de Evento (Global)" : "Sugestão de Evento (Global)", `Evento: ${data.title}`); }
+            window.closeModal('modal-admin-event'); window.notify(canManage ? "Evento Publicado!" : "Sugestão enviada para Luhnny!", "success", false);
         };
 
         window.approveClanEvent = async (id) => { const ev = allEvents.find(e => e.id === id); await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id), { status: 'active' }); await saveLog("Aprovação de Evento (Global)", `Aprovou evento: ${ev?.title}`); window.notify("Evento aprovado!", "success", false); };
@@ -1025,18 +1084,18 @@
         window.confirmDelete = async () => { const ev = allEvents.find(e => e.id === eventToDeleteId); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId)); await saveLog("Exclusão de Evento (Global)", `Removeu o evento: ${ev?.title}`); window.closeModal('modal-confirm-delete'); };
         window.editClanEvent = (id) => { const ev = allEvents.find(e => e.id === id); if(!ev) return; editingEventId = id; editingEventAuthor = ev.suggestedBy; document.getElementById('ev-title').value = ev.title; document.getElementById('ev-theme').value = ev.theme; document.getElementById('ev-date').value = ev.date; document.getElementById('ev-time').value = ev.time || ''; document.getElementById('ev-loc').value = ev.location; document.getElementById('ev-p1').value = ev.prizes?.[0] || ''; document.getElementById('ev-p2').value = ev.prizes?.[1] || ''; document.getElementById('ev-p3').value = ev.prizes?.[2] || ''; document.getElementById('ev-rules').value = ev.rules; window.openModal('modal-admin-event'); };
 
-        window.publishClanAlliance = async () => { const name = document.getElementById('ali-name').value; const tag = document.getElementById('ali-tag').value; const isLuhnny = currentUser?.name === "Luhnny"; if(isLuhnny) { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() }); await saveLog("Nova Aliança", `Criou aliança com clã ${name}`); window.notify("Aliança criada!", "success", false); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() }); await saveLog("Pedido de Aliança", `Sugeriu aliança com clã ${name}`); window.notify("Solicitação enviada!", "success", false); } window.closeModal('modal-admin-alliance'); };
-        window.approveAllianceRequest = async (id, d) => { if (currentUser.name !== "Luhnny") return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: d.name, tag: d.tag, members: [], createdAt: Date.now() }); await saveLog("Aprovação de Aliança", `Aprovou pedido de aliança do clã ${d.name}`); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
-        window.rejectAllianceRequest = async (id) => { if (currentUser.name !== "Luhnny") return; const r = allAllianceRequests.find(x => x.id === id); await saveLog("Recusa de Aliança", `Recusou pedido de aliança do clã ${r?.name}`); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
+        window.publishClanAlliance = async () => { const name = document.getElementById('ali-name').value; const tag = document.getElementById('ali-tag').value; const canManageAlliances = window.hasPermission('MANAGE_ALLIANCES'); if(canManageAlliances) { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() }); await saveLog("Nova Aliança", `Criou aliança com clã ${name}`); window.notify("Aliança criada!", "success", false); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() }); await saveLog("Pedido de Aliança", `Sugeriu aliança com clã ${name}`); window.notify("Solicitação enviada!", "success", false); } window.closeModal('modal-admin-alliance'); };
+        window.approveAllianceRequest = async (id, d) => { if (!window.hasPermission('MANAGE_ALLIANCES')) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: d.name, tag: d.tag, members: [], createdAt: Date.now() }); await saveLog("Aprovação de Aliança", `Aprovou pedido de aliança do clã ${d.name}`); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
+        window.rejectAllianceRequest = async (id) => { if (!window.hasPermission('MANAGE_ALLIANCES')) return; const r = allAllianceRequests.find(x => x.id === id); await saveLog("Recusa de Aliança", `Recusou pedido de aliança do clã ${r?.name}`); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
         window.removeAllyMember = async (id, n) => { const a = allAlliances.find(x => x.id === id); if(a) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); await saveLog("Remoção de Aliado", `Removeu ${n} do clã aliado ${a.name}`); } };
         window.deleteIdentity = async (n) => { try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ally_identities', n)); await saveLog("Exclusão de Vínculo", `Removeu vínculo de identidade de: ${n}`); window.notify("Vínculo removido.", "info", false); } catch (e) { console.error("Erro ao deletar:", e); window.notify("Erro ao remover: " + e.message, "error", false); } };
         window.requestDeleteAlliance = (id) => { allianceToDeleteId = id; window.openModal('modal-confirm-alliance-delete'); };
         window.confirmAllianceDelete = async () => { if (!allianceToDeleteId) return; const ali = allAlliances.find(a => a.id === allianceToDeleteId); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId)); await saveLog("Exclusão de Aliança", `Encerrou aliança com clã ${ali?.name}`); window.closeModal('modal-confirm-alliance-delete'); };
 
         window.renderIdentities = function() {
-            const isAdmin = currentUser && getSuperAdmins().includes(currentUser.name); const allyIdenC = document.getElementById('ally-identities-section'); const allyIdenL = document.getElementById('ally-identities-list'); const memIdenC = document.getElementById('member-identities-section'); const memIdenL = document.getElementById('member-identities-list');
+            const canManage = window.hasPermission('MANAGE_MEMBERS'); const allyIdenC = document.getElementById('ally-identities-section'); const allyIdenL = document.getElementById('ally-identities-list'); const memIdenC = document.getElementById('member-identities-section'); const memIdenL = document.getElementById('member-identities-list');
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            if (!isAdmin) { if(allyIdenC) allyIdenC.classList.add('hidden'); if(memIdenC) memIdenC.classList.add('hidden'); return; }
+            if (!canManage) { if(allyIdenC) allyIdenC.classList.add('hidden'); if(memIdenC) memIdenC.classList.add('hidden'); return; }
             const members = allIdentities.filter(i => { const nickLower = (i.nick || "").toLowerCase(); return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickLower) || allAuthorizedMembers.some(m => m.nick.toLowerCase() === nickLower); });
             const allies = allIdentities.filter(i => !members.some(m => m.id === i.id));
             if (allyIdenC && allyIdenL) { allyIdenC.classList.remove('hidden'); let alliesHtml = ''; if (allies.length === 0) alliesHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>'; else { allies.forEach(i => { alliesHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><div class="flex gap-1">${isLuhnny ? `<button title="Resetar Senha" onclick="window.requestResetAccount('${i.nick}')" class="text-pink-400 hover:text-pink-600 transition"><i data-lucide="key" class="w-4 h-4"></i></button>`:''}<button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`; }); } allyIdenL.innerHTML = alliesHtml; }
@@ -1045,11 +1104,11 @@
         };
 
         window.renderAlliances = function() {
-            const c = document.getElementById('alliances-list'); if (!c) return; const reqC = document.getElementById('alliance-requests-section'); const reqL = document.getElementById('alliance-requests-list'); const isAdmin = currentUser && getSuperAdmins().includes(currentUser.name); c.innerHTML = '';
+            const c = document.getElementById('alliances-list'); if (!c) return; const reqC = document.getElementById('alliance-requests-section'); const reqL = document.getElementById('alliance-requests-list'); const canManageAlliances = window.hasPermission('MANAGE_ALLIANCES'); c.innerHTML = '';
             const isLuhnny = currentUser?.name === "Luhnny";
             if (allAlliances.length === 0) { c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`; } 
-            else { allAlliances.forEach(a => { const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join(''); c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isLuhnny ? `<button onclick="window.requestDeleteAlliance('${a.id}')" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`; }); }
-            if (isLuhnny && allAllianceRequests.length > 0) { reqC.classList.remove('hidden'); reqL.innerHTML = ''; allAllianceRequests.forEach(r => { reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`; }); } else reqC?.classList.add('hidden');
+            else { allAlliances.forEach(a => { const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${canManageAlliances ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join(''); c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isLuhnny ? `<button onclick="window.requestDeleteAlliance('${a.id}')" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`; }); }
+            if (canManageAlliances && allAllianceRequests.length > 0) { reqC.classList.remove('hidden'); reqL.innerHTML = ''; allAllianceRequests.forEach(r => { reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`; }); } else reqC?.classList.add('hidden');
         };
 
         window.requestRecruitmentReview = async () => {
@@ -1070,7 +1129,7 @@
         };
 
         window.updateApplicationStatus = async (id, status) => { 
-            if (!currentUser || !getSuperAdmins().includes(currentUser.name)) return; 
+            if (!window.hasPermission('MANAGE_RECRUITMENT')) return; 
             const appData = allApplications.find(a => a.id === id);
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', id), { status: status, handledBy: currentUser.name }); 
             await saveLog("Recrutamento", `${status.toUpperCase()} recrutamento de ${appData?.nick}`);
@@ -1093,10 +1152,10 @@
             window.closeModal('modal-confirm-rec-delete'); 
         };
 
-        window.toggleRecruitmentStatus = async () => { if (currentUser?.name !== "Luhnny") return; const newStatus = !isRecruitmentOpen; await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), { isOpen: newStatus }); await saveLog("Configuração", `${newStatus ? 'Abriu' : 'Fechou'} o recrutamento.`); };
+        window.toggleRecruitmentStatus = async () => { if (!window.hasPermission('MANAGE_RECRUITMENT')) return; const newStatus = !isRecruitmentOpen; await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), { isOpen: newStatus }); await saveLog("Configuração", `${newStatus ? 'Abriu' : 'Fechou'} o recrutamento.`); };
         
         window.renderAdminApplications = function() {
-            const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !getSuperAdmins().includes(currentUser.name)) return;
+            const c = document.getElementById('admin-applications-list'); if(!c || !window.hasPermission('MANAGE_RECRUITMENT')) return;
             c.innerHTML = ''; const visibleApps = allApplications.filter(app => !app.archived);
             if (visibleApps.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido ativo.</p>'; } 
             else { 
@@ -1161,13 +1220,17 @@
         };
 
         window.updateUI = function() {
-            const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            const isSuperAdmin = currentUser && getSuperAdmins().includes(currentUser.name);
-            const isEventAdmin = currentUser && getEventAdmins().includes(currentUser.name);
-            const isMissionAdmin = currentUser && getMissionAdmins().includes(currentUser.name);
-
+            const canAccessMgmt = window.hasPermission('ACCESS_MGMT_TAB');
+            const canManageRec = window.hasPermission('MANAGE_RECRUITMENT');
+            const canManageAlliances = window.hasPermission('MANAGE_ALLIANCES');
+            const canManageGlobalEvents = window.hasPermission('MANAGE_GLOBAL_EVENTS');
+            const canManageClanEvents = window.hasPermission('MANAGE_CLAN_EVENTS');
+            const canManageMissions = window.hasPermission('MANAGE_MISSIONS');
+            const canManageGlobalGiv = window.hasPermission('MANAGE_GLOBAL_GIVEAWAYS');
+            const canManageClanGiv = window.hasPermission('MANAGE_CLAN_GIVEAWAYS');
+            
             const btnGerenciamento = document.getElementById('btn-gerenciamento');
-            if (isLuhnny) btnGerenciamento?.classList.remove('hidden'); else btnGerenciamento?.classList.add('hidden');
+            if (canAccessMgmt) btnGerenciamento?.classList.remove('hidden'); else btnGerenciamento?.classList.add('hidden');
             
             const aRecPanel = document.getElementById('admin-recruitment-section'); 
             const aAllyBtn = document.getElementById('admin-alliance-panel'); 
@@ -1188,28 +1251,24 @@
             if (currentUser) {
                 lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden'); document.getElementById('logged-name').innerText = currentUser.name;
                 
-                if (isSuperAdmin) { 
-                    aRecPanel?.classList.remove('hidden'); aAllyBtn?.classList.remove('hidden'); recToggle?.classList.remove('hidden'); 
+                if (canManageRec) { 
+                    aRecPanel?.classList.remove('hidden'); recToggle?.classList.remove('hidden'); 
                     recToggle.innerText = isRecruitmentOpen ? "FECHAR RECRUTAMENTO" : "ABRIR RECRUTAMENTO"; 
                     recToggle.className = `w-full py-4 rounded-2xl font-bold text-white mb-10 shadow-lg uppercase transition-all ${isRecruitmentOpen ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'}`; 
-                    btnRecNav?.classList.remove('hidden'); btnAddMemberManual?.classList.remove('hidden');
-                } else { 
-                    aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); 
-                    btnRecNav?.classList.add('hidden'); btnAddMemberManual?.classList.add('hidden');
-                }
+                } else { aRecPanel?.classList.add('hidden'); recToggle?.classList.add('hidden'); }
+
+                if (canManageAlliances) { aAllyBtn?.classList.remove('hidden'); } else { aAllyBtn?.classList.add('hidden'); }
                 
-                if (!currentUser.isAlly && (isMissionAdmin || isSuperAdmin)) { 
-                    aMissionAdmin?.classList.remove('hidden'); aClanAreaBtn?.classList.remove('hidden'); aClanGivBtn?.classList.remove('hidden');
-                } else { 
-                    aMissionAdmin?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden');
-                }
+                if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); }
                 
-                if (isEventAdmin || isSuperAdmin) { 
-                    aEventBtn?.classList.remove('hidden'); aGiveawayBtn?.classList.remove('hidden'); 
-                    if (isSuperAdmin) aClanEventPanelBtn?.classList.remove('hidden'); else aClanEventPanelBtn?.classList.add('hidden');
-                } else { 
-                    aEventBtn?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden');
-                }
+                if (canManageMissions) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
+                if (canManageClanGiv) { aClanGivBtn?.classList.remove('hidden'); } else { aClanGivBtn?.classList.add('hidden'); }
+                
+                if (canManageGlobalEvents) { aEventBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); }
+                if (canManageClanEvents) { aClanEventPanelBtn?.classList.remove('hidden'); } else { aClanEventPanelBtn?.classList.add('hidden'); }
+                if (canManageGlobalGiv) { aGiveawayBtn?.classList.remove('hidden'); } else { aGiveawayBtn?.classList.add('hidden'); }
+                
+                if (window.hasPermission('MANAGE_MEMBERS')) btnAddMemberManual?.classList.remove('hidden'); else btnAddMemberManual?.classList.add('hidden');
                 
             } else { 
                 lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden'); btnRecNav?.classList.remove('hidden'); btnAddMemberManual?.classList.add('hidden'); 
@@ -1230,6 +1289,15 @@
                 if (document.getElementById('mgmt-content-permissions-mgmt') && !document.getElementById('mgmt-content-permissions-mgmt').classList.contains('hidden')) {
                     window.renderPermissionsMgmt();
                 }
+            });
+
+            // Listener para Permissões Individuais
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'individual_permissions'), (s) => {
+                individualPermissions = {};
+                s.docs.forEach(doc => {
+                    individualPermissions[doc.id] = doc.data().permissions || [];
+                });
+                window.updateUI();
             });
 
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) { isRecruitmentOpen = s.data().isOpen; initialRecruitmentLoad = false; window.updateUI(); } });
@@ -1345,7 +1413,7 @@
     <div id="modal-admin-alliance" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl"><h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter">Nova Aliança</h3><div class="space-y-4"><div><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nome do Clã:</label><input type="text" id="ali-name" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none"></div><div><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">TAG do Clã:</label><input type="text" id="ali-tag" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none"></div><button onclick="window.publishClanAlliance()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg uppercase mt-4">Confirmar</button></div></div></div>
     <div id="modal-add-member-manual" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border-4 border-pink-100"><h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter">Autorizar Membro</h3><div class="space-y-4"><div><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick do Jogador:</label><input type="text" id="add-manual-nick" class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none"></div><button onclick="window.addMemberManual()" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg uppercase mt-4">Autorizar</button></div></div></div>
     <div id="modal-view-participants" class="hidden fixed inset-0 z-[1150] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl max-h-[80vh] flex flex-col"><div class="flex justify-between items-center mb-6"><h3 class="text-xl font-bold text-slate-700 uppercase tracking-tighter">Participantes</h3><span id="participants-total-count" class="bg-pink-100 text-pink-600 text-xs font-bold px-3 py-1 rounded-full">0</span></div><div id="participants-list-content" class="flex-grow overflow-y-auto space-y-2 pr-2"></div><button onclick="window.closeModal('modal-view-participants')" class="mt-6 w-full bg-slate-100 text-slate-500 font-bold py-3 rounded-xl uppercase text-sm">Fechar</button></div></div>
-    <div id="modal-admin-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"><h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase">Configurar Evento</h3><form id="modal-admin-event-form" onsubmit="event.preventDefault(); window.publishClanEvent();"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><input type="text" id="ev-title" placeholder="Título*" required class="p-3 bg-slate-50 border rounded-xl outline-none"><input type="text" id="ev-theme" placeholder="Tema*" required class="p-3 bg-slate-50 border rounded-xl outline-none"><input type="date" id="ev-date" required class="p-3 bg-slate-50 border rounded-xl"><input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl"><input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl"><div class="md:col-span-2 space-y-2"><label class="text-[10px] font-bold text-pink-400 uppercase">Prêmios:</label><input type="text" id="ev-p1" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="ev-p2" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="ev-p3" class="w-full p-2 border rounded-lg text-sm"></div></div><textarea id="ev-rules" placeholder="Regras..." required class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 outline-none"></textarea><button type="submit" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg uppercase">Salvar Evento</button></form></div></div>
+    <div id="modal-admin-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"><h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase">Configurar Evento Global</h3><form id="modal-admin-event-form" onsubmit="event.preventDefault(); window.publishClanEvent();"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><input type="text" id="ev-title" placeholder="Título*" required class="p-3 bg-slate-50 border rounded-xl outline-none"><input type="text" id="ev-theme" placeholder="Tema*" required class="p-3 bg-slate-50 border rounded-xl outline-none"><input type="date" id="ev-date" required class="p-3 bg-slate-50 border rounded-xl"><input type="time" id="ev-time" class="p-3 bg-slate-50 border rounded-xl"><input type="text" id="ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl"><div class="md:col-span-2 space-y-2"><label class="text-[10px] font-bold text-pink-400 uppercase">Prêmios:</label><input type="text" id="ev-p1" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="ev-p2" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="ev-p3" class="w-full p-2 border rounded-lg text-sm"></div></div><textarea id="ev-rules" placeholder="Regras..." required class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 outline-none"></textarea><button type="submit" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg uppercase">Salvar Evento</button></form></div></div>
     <div id="modal-clan-event" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border-4 border-purple-100"><h3 class="text-2xl font-bold text-purple-600 mb-6 uppercase">Evento do Clã</h3><form id="modal-clan-event-form" onsubmit="event.preventDefault(); window.publishClanEventData();"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><input type="text" id="clan-ev-title" placeholder="Título*" required class="p-3 bg-slate-50 border rounded-xl outline-none"><input type="text" id="clan-ev-theme" placeholder="Tema*" required class="p-3 bg-slate-50 border rounded-xl outline-none"><input type="date" id="clan-ev-date" required class="p-3 bg-slate-50 border rounded-xl"><input type="time" id="clan-ev-time" class="p-3 bg-slate-50 border rounded-xl"><input type="text" id="clan-ev-loc" placeholder="Local" class="p-3 bg-slate-50 border rounded-xl"><div class="md:col-span-2 space-y-2"><label class="text-[10px] font-bold text-purple-400 uppercase">Prêmios:</label><input type="text" id="clan-ev-p1" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="clan-ev-p2" class="w-full p-2 border rounded-lg text-sm"><input type="text" id="clan-ev-p3" class="w-full p-2 border rounded-lg text-sm"></div></div><textarea id="clan-ev-rules" placeholder="Regras..." required class="w-full p-4 bg-slate-50 border rounded-xl h-24 mb-6 mt-4 outline-none"></textarea><button type="submit" class="w-full bg-purple-500 text-white font-bold py-3 rounded-xl shadow-lg uppercase transition">Salvar Evento</button></form></div></div>
     <div id="modal-confirm-mission-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Concluir/Excluir?</h3><div class="flex gap-4"><button onclick="window.confirmMissionDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-mission-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition hover:bg-slate-200 text-slate-500 uppercase">Não</button></div></div></div>
     <div id="modal-confirm-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl"><h3 class="text-xl font-bold mb-6 uppercase text-slate-800">Eliminar Evento?</h3><div class="flex gap-4"><button onclick="window.confirmDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button></div></div></div>
@@ -1354,5 +1422,8 @@
     <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition text-slate-500 uppercase">Não</button></div></div></div>
     <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3><div class="flex gap-4"><button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition text-slate-500 uppercase">Não</button></div></div></div>
     <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label><input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label><input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags:</label><input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Foto:</label><input type="file" id="edit-mem-img-input" accept="image/*" class="w-full text-xs text-slate-500 cursor-pointer"></div></div><div class="flex gap-4 mt-8"><button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg uppercase">Salvar</button><button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Cancelar</button></div></div></div>
+    
+    <!-- MODAL: PERMISSÕES INDIVIDUAIS -->
+    <div id="modal-individual-permissions" class="hidden fixed inset-0 z-[1300] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl transition-all max-h-[90vh] flex flex-col"><h3 class="text-2xl font-bold mb-2 text-pink-600 uppercase tracking-tighter leading-tight">Acessos de: <span id="indiv-perm-nick"></span></h3><p class="text-xs text-slate-400 mb-6 uppercase font-bold italic">Estas permissões ignoram o cargo do jogador.</p><div id="indiv-perms-checkboxes" class="flex-grow overflow-y-auto space-y-2 pr-2"></div><div class="flex gap-4 mt-8"><button onclick="window.closeModal('modal-individual-permissions')" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg uppercase">Fechar e Salvar</button></div></div></div>
 </body>
 </html>
