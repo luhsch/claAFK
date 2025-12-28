@@ -778,11 +778,14 @@
             const list = document.getElementById(listId); if(!list) return;
             list.innerHTML = '';
             const dataList = isClan ? allClanGiveaways : allGiveaways;
-            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            const visibleList = isClan && !isEventAdmin ? dataList.filter(g => g.status !== 'suggestion' || g.createdBy === currentUser?.name) : dataList;
+            
+            const isAdminOfThisSection = isClan ? isSuperAdmin : (currentUser && ALL_ADMINS.includes(currentUser.name));
+            
+            const visibleList = isClan && !isAdminOfThisSection ? dataList.filter(g => g.status !== 'suggestion' || g.createdBy === currentUser?.name) : dataList;
             if (visibleList.length === 0) { list.innerHTML = `<div class="col-span-full text-center p-12 bg-white rounded-3xl border-2 border-dashed border-${isClan ? 'purple' : 'pink'}-200 text-slate-400 font-medium">Nenhum sorteio ${isClan ? 'do clã ' : ''}ativo no momento. Fique atento!</div>`; return; }
+            
             visibleList.sort((a,b) => (a.status === 'open' ? -1 : 1) || b.createdAt - a.createdAt).forEach(g => {
                 const isParticipant = currentUser && (g.participants || []).includes(currentUser.name);
                 const hasWinner = g.winner !== null;
@@ -790,15 +793,23 @@
                 const pCount = (g.participants || []).length;
                 const isCreator = currentUser && (g.createdBy === currentUser.name || isLuhnny);
                 let actionArea = '';
-                if (isSuggestion) { if (isEventAdmin) { actionArea = `<div class="mt-6"><button onclick="window.approveClanGiveaway('${g.id}')" class="w-full py-3 rounded-xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 transition uppercase text-xs">Aprovar Sorteio</button></div>`; } else { actionArea = `<div class="mt-6 p-3 bg-yellow-50 text-yellow-600 rounded-xl border border-yellow-100 text-center text-xs font-bold uppercase">Aguardando aprovação da Luhnny</div>`; } } 
+                
+                if (isSuggestion) { 
+                    if (isAdminOfThisSection) { 
+                        actionArea = `<div class="mt-6"><button onclick="window.approveClanGiveaway('${g.id}')" class="w-full py-3 rounded-xl bg-green-500 text-white font-bold shadow-lg hover:bg-green-600 transition uppercase text-xs">Aprovar Sorteio</button></div>`; 
+                    } else { 
+                        actionArea = `<div class="mt-6 p-3 bg-yellow-50 text-yellow-600 rounded-xl border border-yellow-100 text-center text-xs font-bold uppercase">Aguardando aprovação da Luhnny</div>`; 
+                    } 
+                } 
                 else if (hasWinner) { actionArea = `<div class="mt-6 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-200 text-center"><p class="text-xs font-bold text-yellow-600 uppercase mb-1">O jogador que ganhou é:</p><p class="text-2xl font-extrabold text-slate-800 flex justify-center items-center gap-2"><i data-lucide="trophy" class="w-6 h-6 text-yellow-500"></i> ${g.winner}</p></div>`; } 
                 else {
                     let joinBtn = currentUser && !isParticipant ? `<button onclick="window.joinGiveaway('${g.id}', ${isClan})" class="w-full py-3 rounded-xl ${isClan ? 'bg-purple-500 hover:bg-purple-600' : 'pink-gradient'} text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:shadow-xl flex items-center justify-center gap-2"><i data-lucide="ticket"></i> Quero Participar</button>` : currentUser && isParticipant ? `<div class="w-full py-3 rounded-xl bg-green-50 text-green-600 font-bold border border-green-200 text-center flex items-center justify-center gap-2"><i data-lucide="check-circle"></i> Você está participando</div>` : `<div class="text-center text-sm text-slate-400 italic">Faça login para participar</div>`;
-                    let drawBtn = (isSuperAdmin || isCreator) && pCount > 0 ? `<div class="mt-3 flex gap-2"><button onclick="window.runGiveawayDraw('${g.id}', ${isClan})" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button><button onclick="window.viewParticipants('${g.id}', ${isClan})" class="px-4 py-3 rounded-xl bg-${isClan ? 'purple' : 'pink'}-100 text-${isClan ? 'purple' : 'pink'}-600 font-bold shadow-sm hover:bg-${isClan ? 'purple' : 'pink'}-200 transition"><i data-lucide="eye"></i></button></div>` : (isSuperAdmin || isCreator) && pCount === 0 ? `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>` : isEventAdmin ? `<button onclick="window.viewParticipants('${g.id}', ${isClan})" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>` : '';
+                    let drawBtn = (isSuperAdmin || isCreator) && pCount > 0 ? `<div class="mt-3 flex gap-2"><button onclick="window.runGiveawayDraw('${g.id}', ${isClan})" class="flex-1 py-3 rounded-xl bg-slate-800 text-white font-bold shadow-lg transition active:scale-95 uppercase tracking-tighter hover:bg-slate-900 flex items-center justify-center gap-2"><i data-lucide="dices"></i> Sortear Agora</button><button onclick="window.viewParticipants('${g.id}', ${isClan})" class="px-4 py-3 rounded-xl bg-${isClan ? 'purple' : 'pink'}-100 text-${isClan ? 'purple' : 'pink'}-600 font-bold shadow-sm hover:bg-${isClan ? 'purple' : 'pink'}-200 transition"><i data-lucide="eye"></i></button></div>` : (isSuperAdmin || isCreator) && pCount === 0 ? `<div class="mt-3 text-center text-xs text-slate-400 font-bold uppercase">Aguardando participantes...</div>` : isAdminOfThisSection ? `<button onclick="window.viewParticipants('${g.id}', ${isClan})" class="w-full mt-3 px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs uppercase hover:bg-slate-200 transition">Ver Participantes</button>` : '';
                     actionArea = `<div class="mt-6 space-y-3">${joinBtn}${drawBtn}</div>`;
                 }
-                let delBtn = isSuperAdmin ? `<button onclick="window.requestDeleteGiveaway('${g.id}', ${isClan})" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '';
-                let editBtn = (isEventAdmin || isCreator) ? `<button onclick="window.editGiveaway('${g.id}', ${isClan})" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button>` : '';
+                
+                let delBtn = isLuhnny ? `<button onclick="window.requestDeleteGiveaway('${g.id}', ${isClan})" class="p-2 text-red-300 hover:text-red-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '';
+                let editBtn = (isAdminOfThisSection || isCreator) ? `<button onclick="window.editGiveaway('${g.id}', ${isClan})" class="p-2 text-blue-300 hover:text-blue-500 transition bg-white rounded-full shadow-sm border border-slate-100"><i data-lucide="edit-2" class="w-4 h-4"></i></button>` : '';
                 let adminControls = (editBtn || delBtn) ? `<div class="absolute top-4 right-4 flex gap-2">${editBtn}${delBtn}</div>` : '';
                 list.innerHTML += `<div class="relative bg-white p-8 rounded-3xl card-shadow border-2 ${hasWinner ? 'border-yellow-200' : isSuggestion ? 'border-yellow-200 border-dashed' : isClan ? 'border-purple-200' : 'border-pink-200'} flex flex-col justify-between transition hover:scale-[1.01]">${adminControls}<div><div class="flex items-center gap-2 mb-2 text-${isClan ? 'purple' : 'pink'}-500 font-bold text-xs uppercase tracking-wider"><i data-lucide="calendar" class="w-4 h-4"></i> ${g.date} às ${g.time}</div><h3 class="text-2xl font-extrabold text-slate-800 mb-1">${g.prize}</h3><p class="text-sm text-slate-500 font-medium">Sorteio organizado por ${g.createdBy}</p><div class="mt-4 flex items-center gap-2 text-sm text-slate-600 font-semibold bg-slate-50 p-2 rounded-lg inline-block"><i data-lucide="users" class="w-4 h-4 text-${isClan ? 'purple' : 'pink'}-400"></i> ${pCount} Participantes</div></div>${actionArea}</div>`;
             });
@@ -808,15 +819,15 @@
         window.createEventCard = function(ev, type) {
             const isP = currentUser && (ev.participants || []).includes(currentUser.name);
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
-            let controls = '';
             const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
+            let controls = '';
             const pCount = (ev.participants || []).length;
             const creditText = (ev.suggestedBy && !ALL_ADMINS.includes(ev.suggestedBy)) ? `<div class="mb-2 text-[10px] bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 font-bold uppercase"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
             const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">${p}${isLuhnny ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${false})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
+            
             if (isEventAdmin) {
-                let deleteControl = isSuperAdmin ? `<button onclick="window.requestDeleteEvent('${ev.id}')" class="${type === 'suggestion' ? 'text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg' : 'p-1 text-red-300'}">${type === 'suggestion' ? 'Rejeitar' : '<i data-lucide="trash-2" class="w-4 h-4"></i>'}</button>` : '';
+                let deleteControl = isLuhnny ? `<button onclick="window.requestDeleteEvent('${ev.id}')" class="${type === 'suggestion' ? 'text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg' : 'p-1 text-red-300'}">${type === 'suggestion' ? 'Rejeitar' : '<i data-lucide="trash-2" class="w-4 h-4"></i>'}</button>` : '';
                 if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEvent('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button>${deleteControl}</div>`;
                 else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEvent('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatus('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button>${deleteControl}</div>${pList}`;
             } else if (currentUser && !currentUser.isAlly && (type === 'active' || type === 'history')) { controls = pList; }
@@ -838,15 +849,15 @@
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
             const isSuperAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name);
             let controls = ''; 
-            const isEventAdmin = currentUser && ALL_ADMINS.includes(currentUser.name);
             const pCount = (ev.participants || []).length;
             const creditText = (ev.suggestedBy && ev.suggestedBy !== 'Luhnny') ? `<div class="mb-2 text-[10px] font-bold bg-pink-50 text-pink-500 py-1 px-2 rounded-lg inline-flex items-center gap-1 uppercase"><i data-lucide="award" class="w-3 h-3"></i> Sugestão de: ${ev.suggestedBy}</div>` : '';
             const pList = `<div class="mt-4 text-slate-500 font-semibold text-left flex flex-col gap-2"><span class="text-slate-400 font-bold uppercase text-xs">Inscritos (${pCount}):</span><div class="flex flex-wrap gap-2">${pCount > 0 ? ev.participants.map(p => `<span class="group bg-pink-50 border border-pink-100 px-3 py-1.5 rounded-xl text-pink-600 text-sm font-bold shadow-sm flex items-center gap-1.5">${p}${isLuhnny ? `<button onclick="window.removeEventParticipant('${ev.id}', '${p}', ${true})" class="text-red-400 hover:text-red-600 transition leading-none">×</button>` : ''}</span>`).join('') : '<span class="italic text-slate-300 text-sm">Ninguém inscrito</span>'}</div></div>`;
             const prizeDisplay = `<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Prêmios:</p><p class="font-medium text-slate-600">🥇 ${ev.prizes?.[0] || '?'} | 🥈 ${ev.prizes?.[1] || '?'} | 🥉 ${ev.prizes?.[2] || '?'}</p></div>`;
             
             if (isSuperAdmin) {
-                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button></div>`;
-                else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatusInternal('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button><button onclick="window.deleteClanEvent('${ev.id}')" class="p-1 text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${pList}`;
+                let deleteControl = isLuhnny ? `<button onclick="window.deleteClanEvent('${ev.id}')" class="${type === 'suggestion' ? 'text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg' : 'p-1 text-red-300'}"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : '';
+                if (type === 'suggestion') controls = `<div class="mt-4 flex gap-2 border-t pt-4"><button onclick="window.approveClanEventInternal('${ev.id}')" class="text-[10px] bg-green-500 text-white px-3 py-1 rounded-lg font-bold">Aprovar</button><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-blue-100 text-blue-600 px-3 py-1 rounded-lg font-bold">Editar</button>${isLuhnny ? `<button onclick="window.deleteClanEvent('${ev.id}')" class="text-[10px] bg-red-100 text-red-600 px-3 py-1 rounded-lg">Rejeitar</button>` : ''}</div>`;
+                else controls = `<div class="mt-4 flex flex-wrap gap-2 border-t pt-4"><button onclick="window.editClanEventInternal('${ev.id}')" class="text-[10px] bg-pink-100 text-pink-600 px-3 py-1 rounded-lg font-bold">Editar</button><button onclick="window.updateClanEventStatusInternal('${ev.id}', '${ev.status}')" class="text-[10px] bg-slate-800 text-white px-3 py-1 rounded-lg">${ev.status === 'active' ? 'Encerrar' : 'Reativar'}</button>${deleteControl}</div>${pList}`;
             } else { controls = pList; }
             return `<div class="bg-white rounded-3xl card-shadow border-2 ${type === 'active' ? 'border-pink-200' : type === 'suggestion' ? 'border-yellow-200 border-dashed' : 'border-slate-200 opacity-75'} p-6 mb-6 max-w-4xl mx-auto text-left transition-transform hover:scale-[1.01]"><div class="flex justify-between items-start mb-1"><h3 class="text-xl font-bold ${type === 'active' ? 'text-pink-600' : 'text-slate-600'}">${ev.title}</h3><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${type === 'active' ? 'bg-green-100 text-green-600' : type === 'suggestion' ? 'bg-yellow-100 text-yellow-600' : 'bg-slate-100 text-slate-500'}">${type === 'active' ? 'Ativo' : type === 'suggestion' ? 'Pendente' : 'Encerrado'}</span></div>${creditText}<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mb-6 mt-4"><div class="space-y-2"><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="calendar" class="w-4 h-4 text-pink-300"></i> ${ev.date}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="clock" class="w-4 h-4 text-pink-300"></i> ${ev.time || 'A definir'}</p><p class="flex items-center gap-2 font-medium text-slate-600"><i data-lucide="map-pin" class="w-4 h-4 text-pink-300"></i> ${ev.location}</p></div><div class="space-y-2">${prizeDisplay}<div class="text-xs"><p class="font-bold text-pink-400 uppercase mb-1 text-[10px]">Tema:</p><p class="font-medium text-slate-600">${ev.theme}</p></div></div></div><div class="mb-6 p-4 bg-slate-50 rounded-xl text-xs text-slate-500 italic border border-slate-100"><strong>Sobre:</strong> ${ev.rules}</div>${type === 'active' && currentUser && !currentUser.isAlly ? `<button onclick="window.toggleClanEventJoin('${ev.id}')" class="w-full py-3 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 ${isP ? 'bg-red-50 text-red-500' : 'pink-gradient text-white hover:shadow-lg active:scale-95'}"><i data-lucide="${isP ? 'x-circle' : 'user-plus'}"></i> ${isP ? 'Cancelar Participação' : 'Quero Participar'}</button>` : ''}${controls}</div>`;
         };
@@ -900,7 +911,7 @@
         window.confirmDelete = async () => { const ev = allEvents.find(e => e.id === eventToDeleteId); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', eventToDeleteId)); await saveLog("Exclusão de Evento (Global)", `Removeu o evento: ${ev?.title}`); window.closeModal('modal-confirm-delete'); };
         window.editClanEvent = (id) => { const ev = allEvents.find(e => e.id === id); if(!ev) return; editingEventId = id; editingEventAuthor = ev.suggestedBy; document.getElementById('ev-title').value = ev.title; document.getElementById('ev-theme').value = ev.theme; document.getElementById('ev-date').value = ev.date; document.getElementById('ev-time').value = ev.time || ''; document.getElementById('ev-loc').value = ev.location; document.getElementById('ev-p1').value = ev.prizes?.[0] || ''; document.getElementById('ev-p2').value = ev.prizes?.[1] || ''; document.getElementById('ev-p3').value = ev.prizes?.[2] || ''; document.getElementById('ev-rules').value = ev.rules; window.openModal('modal-admin-event'); };
 
-        window.publishClanAlliance = async () => { const name = document.getElementById('ali-name').value; const tag = document.getElementById('ali-tag').value; const isAdmin = SUPER_ADMINS.includes(currentUser.name); if(isAdmin) { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() }); await saveLog("Nova Aliança", `Criou aliança com clã ${name}`); window.notify("Aliança criada!", "success", false); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() }); await saveLog("Pedido de Aliança", `Sugeriu aliança com clã ${name}`); window.notify("Solicitação enviada!", "success", false); } window.closeModal('modal-admin-alliance'); };
+        window.publishClanAlliance = async () => { const name = document.getElementById('ali-name').value; const tag = document.getElementById('ali-tag').value; const isLuhnny = currentUser?.name === "Luhnny"; if(isLuhnny) { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name, tag, members: [], createdAt: Date.now() }); await saveLog("Nova Aliança", `Criou aliança com clã ${name}`); window.notify("Aliança criada!", "success", false); } else { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliance_requests'), { name, tag, requestedBy: currentUser.name, createdAt: Date.now() }); await saveLog("Pedido de Aliança", `Sugeriu aliança com clã ${name}`); window.notify("Solicitação enviada!", "success", false); } window.closeModal('modal-admin-alliance'); };
         window.approveAllianceRequest = async (id, d) => { if (currentUser.name !== "Luhnny") return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'alliances'), { name: d.name, tag: d.tag, members: [], createdAt: Date.now() }); await saveLog("Aprovação de Aliança", `Aprovou pedido de aliança do clã ${d.name}`); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
         window.rejectAllianceRequest = async (id) => { if (currentUser.name !== "Luhnny") return; const r = allAllianceRequests.find(x => x.id === id); await saveLog("Recusa de Aliança", `Recusou pedido de aliança do clã ${r?.name}`); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliance_requests', id)); };
         window.removeAllyMember = async (id, n) => { const a = allAlliances.find(x => x.id === id); if(a) { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', id), { members: a.members.filter(x => x !== n) }); await saveLog("Remoção de Aliado", `Removeu ${n} do clã aliado ${a.name}`); } };
@@ -921,9 +932,11 @@
 
         window.renderAlliances = function() {
             const c = document.getElementById('alliances-list'); if (!c) return; const reqC = document.getElementById('alliance-requests-section'); const reqL = document.getElementById('alliance-requests-list'); const isAdmin = currentUser && SUPER_ADMINS.includes(currentUser.name); c.innerHTML = '';
+            const isLuhnny = currentUser?.name === "Luhnny";
+            
             if (allAlliances.length === 0) { c.innerHTML = `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">C0RV0S</h4><span class="text-pink-400 font-bold uppercase text-sm">CR0W</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div><div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex items-center justify-between"><div><h4 class="text-xl font-bold">Tenebris</h4><span class="text-pink-400 font-bold uppercase text-sm">TNB</span></div><div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div>`; } 
-            else { allAlliances.forEach(a => { const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join(''); c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isAdmin ? `<button onclick="window.requestDeleteAlliance('${a.id}')" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`; }); }
-            if (currentUser && currentUser.name === "Luhnny" && allAllianceRequests.length > 0) { reqC.classList.remove('hidden'); reqL.innerHTML = ''; allAllianceRequests.forEach(r => { reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`; }); } else reqC?.classList.add('hidden');
+            else { allAlliances.forEach(a => { const m = (a.members || []).map(nick => `<span class="bg-slate-50 px-2 py-1 rounded text-[10px] font-bold border flex items-center gap-1">${nick}${isAdmin ? `<button onclick="window.removeAllyMember('${a.id}','${nick}')" class="text-red-400">×</button>`:''}</span>`).join(''); c.innerHTML += `<div class="bg-white p-6 rounded-3xl card-shadow border-2 border-pink-100 flex flex-col transition-all hover:scale-[1.02]"><div class="flex items-center justify-between"><div><h4 class="text-xl font-bold">${a.name}</h4><span class="text-pink-400 font-bold uppercase text-sm">${a.tag}</span></div><div class="flex gap-2">${isLuhnny ? `<button onclick="window.requestDeleteAlliance('${a.id}')" class="text-red-300"><i data-lucide="trash-2"></i></button>`:''}<div class="p-3 bg-pink-50 rounded-full text-pink-400"><i data-lucide="shield-check"></i></div></div></div><div class="mt-4 border-t pt-2 flex flex-wrap gap-1">${m}</div></div>`; }); }
+            if (isLuhnny && allAllianceRequests.length > 0) { reqC.classList.remove('hidden'); reqL.innerHTML = ''; allAllianceRequests.forEach(r => { reqL.innerHTML += `<div class="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-100 flex items-center justify-between shadow-sm"><div class="text-left"><h5 class="font-bold text-slate-800">${r.name}</h5><p class="text-[10px] text-yellow-600 font-bold">De: ${r.requestedBy}</p></div><div class="flex gap-2"><button onclick='window.approveAllianceRequest("${r.id}", ${JSON.stringify(r)})' class="bg-green-500 text-white p-2 rounded-lg"><i data-lucide="check" class="w-4 h-4"></i></button><button onclick="window.rejectAllianceRequest('${r.id}')" class="bg-red-500 text-white p-2 rounded-lg"><i data-lucide="x" class="w-4 h-4"></i></button></div></div>`; }); } else reqC?.classList.add('hidden');
         };
 
         window.requestRecruitmentReview = async () => {
@@ -973,7 +986,40 @@
             const c = document.getElementById('admin-applications-list'); if(!c || !currentUser || !SUPER_ADMINS.includes(currentUser.name)) return;
             c.innerHTML = ''; const visibleApps = allApplications.filter(app => !app.archived);
             if (visibleApps.length === 0) { c.innerHTML = '<p class="text-center text-slate-400 italic col-span-full py-10">Nenhum pedido ativo.</p>'; } 
-            else { visibleApps.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => { const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' }; const decisor = app.handledBy ? `<div class="mt-4 pt-2 border-t text-[11px] font-bold text-pink-500 uppercase">Decidido por: ${app.handledBy}</div>` : ''; c.innerHTML += `<div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug"><div class="flex justify-between items-center mb-4"><h4 class="text-xl font-bold text-pink-600">${app.nick}</h4><span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span></div><div class="grid grid-cols-2 gap-2 text-sm text-slate-600 mb-4 leading-tight"><p><strong>Discord:</strong> ${app.discord || '-'}</p><p><strong>Idade:</strong> ${app.idade}</p><p><strong>PC/Mob:</strong> ${app.plataforma}</p><p><strong>Voice:</strong> ${app.voice}</p><p><strong>Aniv:</strong> ${app.aniversario}</p><p class="col-span-2 italic mt-1 text-slate-400">Horários: ${app.horarios}</p></div><div class="flex gap-2 border-t pt-4"><button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm">APROVAR</button><button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-sm">NEGAR</button><button onclick="window.requestDeleteApplication('${app.id}', '${app.status}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div>${decisor}</div>`; }); } lucide.createIcons();
+            else { 
+                visibleApps.sort((a,b)=>b.createdAt-a.createdAt).forEach(app => { 
+                    const colors = { aprovado: 'bg-green-100 text-green-700', negado: 'bg-red-100 text-red-700', pendente: 'bg-yellow-100 text-yellow-700' }; 
+                    const decisor = app.handledBy ? `<div class="mt-4 pt-2 border-t text-[11px] font-bold text-pink-500 uppercase">Decidido por: ${app.handledBy}</div>` : ''; 
+                    c.innerHTML += `
+                    <div class="bg-white p-6 rounded-2xl border-2 border-slate-100 card-shadow text-left leading-snug">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="text-xl font-bold text-pink-600">${app.nick}</h4>
+                            <span class="px-3 py-1 rounded-full text-[10px] font-bold uppercase ${colors[app.status]}">${app.status}</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] text-slate-600 mb-4 leading-tight">
+                            <p><strong>Discord:</strong> ${app.discord || '-'}</p>
+                            <p><strong>Idade:</strong> ${app.idade}</p>
+                            <p><strong>Tempo:</strong> ${app.tempo}h</p>
+                            <p><strong>Rank:</strong> ${app.rank || '-'}</p>
+                            <p><strong>PC/Mob:</strong> ${app.plataforma}</p>
+                            <p><strong>Voice:</strong> ${app.voice}</p>
+                            <p><strong>Combate:</strong> ${app.combate}</p>
+                            <p><strong>Build:</strong> ${app.build}</p>
+                            <p><strong>Farm:</strong> ${app.farm}</p>
+                            <p><strong>Aniv:</strong> ${app.aniversario || '-'}</p>
+                            <p class="col-span-2"><strong>Clãs Antigos:</strong> ${app.clas || '-'}</p>
+                            <p class="col-span-2 italic mt-1 text-slate-400"><strong>Horários:</strong> ${app.horarios || '-'}</p>
+                        </div>
+                        <div class="flex gap-2 border-t pt-4">
+                            <button onclick="window.updateApplicationStatus('${app.id}','aprovado')" class="flex-1 bg-green-500 text-white py-2 rounded-lg font-bold text-sm">APROVAR</button>
+                            <button onclick="window.updateApplicationStatus('${app.id}','negado')" class="flex-1 bg-red-500 text-white py-2 rounded-lg font-bold text-sm">NEGAR</button>
+                            <button onclick="window.requestDeleteApplication('${app.id}', '${app.status}')" class="p-2 bg-slate-50 text-slate-300 hover:text-red-500 rounded-lg transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        </div>
+                        ${decisor}
+                    </div>`; 
+                }); 
+            } 
+            lucide.createIcons();
         };
 
         let recruitmentTimerInterval = null;
@@ -1112,7 +1158,7 @@
         <div id="tab-aliancas" class="hidden text-center"><div id="alliance-requests-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-yellow-100 text-center"><h3 class="text-xl font-bold text-yellow-600 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="clock" class="w-6 h-6"></i> Solicitações Pendentes (Luhnny)</h3><div id="alliance-requests-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div></div><div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2><button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition uppercase leading-tight tracking-tighter">Adicionar Aliança</button></div><div id="alliances-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div>
         <div id="tab-recrutamento" class="hidden text-center"><button id="luhnny-recruitment-toggle" onclick="window.toggleRecruitmentStatus()" class="hidden"></button><div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200"><h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center uppercase">Gerenciar Pedidos</h2><div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div><div id="my-recruitment-status" class="max-w-3xl mx-auto"></div><div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto transition-all"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-inner"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight tracking-tighter">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed font-medium">Neste momento não estamos a aceitar candidaturas. Tenta mais tarde!</p></div><div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center"><h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2><form id="form-recruitment" onsubmit="event.preventDefault(); window.requestRecruitmentReview();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Discord*:</label><input type="text" id="rec-discord" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Tempo de Jogo (h)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Simple Voice?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sim">Sim</option><option value="Não">Não</option></select></div><div class="col-span-full"><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">PC ou Mobile?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl"></div><div class="col-span-full"><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Horários:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl h-16"></textarea></div><button type="submit" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] transition-all uppercase tracking-widest leading-tight">Enviar Formulário</button></form></div></div>
         
-        <!-- ABA GERENCIAMENTO (NOVA) -->
+        <!-- ABA GERENCIAMENTO -->
         <div id="tab-gerenciamento" class="hidden">
             <div class="max-w-6xl mx-auto px-6 mb-10 text-center border-b border-pink-100">
                 <div class="flex gap-8 justify-center">
@@ -1121,7 +1167,6 @@
                 </div>
             </div>
 
-            <!-- SUBDIVISÃO LOGS -->
             <div id="mgmt-content-logs-mgmt" class="">
                 <div class="bg-white p-8 rounded-3xl card-shadow border border-pink-100 max-w-5xl mx-auto">
                     <div class="flex items-center justify-between mb-8">
@@ -1132,9 +1177,74 @@
                 </div>
             </div>
 
-            <!-- SUBDIVISÃO PERMISSÕES -->
             <div id="mgmt-content-permissions-mgmt" class="hidden">
                 <div class="space-y-10">
+                    <!-- CONTROLE DE HIERARQUIA ADMINISTRATIVA -->
+                    <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-100 max-w-6xl mx-auto">
+                        <div class="flex items-center justify-between mb-8">
+                            <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase"><i data-lucide="shield-check"></i> Controle de Hierarquia Administrativa</h2>
+                            <span class="bg-pink-100 text-pink-600 px-4 py-1 rounded-lg text-[10px] font-bold uppercase">Gerenciado por Luhnny</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <!-- Administradores Principais -->
+                            <div class="bg-pink-50/50 p-6 rounded-2xl border-2 border-pink-100 flex flex-col">
+                                <h3 class="font-bold text-pink-600 uppercase text-sm mb-4 flex items-center gap-2"><i data-lucide="crown" class="w-4 h-4"></i> Admins Principais (Super Admins)</h3>
+                                <div class="flex-grow space-y-3 text-xs text-slate-600 mb-6">
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-pink-400"></i> Gerenciar pedidos de recrutamento (Aprovar/Negar).</p>
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-pink-400"></i> Gerenciar alianças (Adicionar/Remover clãs).</p>
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-pink-400"></i> Autorizar membros manualmente.</p>
+                                    <p class="flex items-start gap-2 italic text-red-400"><i data-lucide="alert-circle" class="w-3 h-3 mt-0.5"></i> Sem permissão de exclusão (Exceto Luhnny).</p>
+                                </div>
+                                <div class="pt-4 border-t border-pink-100">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">Lista de Admins:</span>
+                                    <div class="flex flex-wrap gap-1 mt-2">
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-pink-500 border border-pink-100">Luhnny</span>
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-pink-500 border border-pink-100">Lagartuuuxaaa</span>
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-pink-500 border border-pink-100">K0ssh1_</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Administradores de Eventos -->
+                            <div class="bg-purple-50/50 p-6 rounded-2xl border-2 border-purple-100 flex flex-col">
+                                <h3 class="font-bold text-purple-600 uppercase text-sm mb-4 flex items-center gap-2"><i data-lucide="calendar" class="w-4 h-4"></i> Admins de Eventos</h3>
+                                <div class="flex-grow space-y-3 text-xs text-slate-600 mb-6">
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-purple-400"></i> Criar, editar Global Events e Sorteios.</p>
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-purple-400"></i> Realizar sorteio e ver participantes.</p>
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-purple-400"></i> Aprovar sugestões enviadas por membros.</p>
+                                    <p class="flex items-start gap-2 italic text-red-400"><i data-lucide="lock" class="w-3 h-3 mt-0.5"></i> Bloqueados na Área do Clã e Exclusões.</p>
+                                </div>
+                                <div class="pt-4 border-t border-purple-100">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">Lista de Admins:</span>
+                                    <div class="flex flex-wrap gap-1 mt-2">
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-purple-500 border border-purple-100">SrLordM</span>
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-purple-500 border border-purple-100">Bone</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Administradores de Missões -->
+                            <div class="bg-blue-50/50 p-6 rounded-2xl border-2 border-blue-100 flex flex-col">
+                                <h3 class="font-bold text-blue-600 uppercase text-sm mb-4 flex items-center gap-2"><i data-lucide="scroll" class="w-4 h-4"></i> Admins de Missões</h3>
+                                <div class="flex-grow space-y-3 text-xs text-slate-600 mb-6">
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-blue-400"></i> Criar missões diretamente.</p>
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-blue-400"></i> Aprovar ou recusar sugestões de missões.</p>
+                                    <p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-blue-400"></i> Concluir missões e confirmar pagamentos.</p>
+                                </div>
+                                <div class="pt-4 border-t border-blue-100">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">Lista de Admins:</span>
+                                    <div class="flex flex-wrap gap-1 mt-2">
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-blue-500 border border-blue-100">Luhnny</span>
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-blue-500 border border-blue-100">Lagartuuuxaaa</span>
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-blue-500 border border-blue-100">K0ssh1_</span>
+                                        <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-blue-500 border border-blue-100">2aswd</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Autorização de Membros -->
                     <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-50 max-w-5xl mx-auto">
                         <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
