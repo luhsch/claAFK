@@ -87,14 +87,22 @@
         let editingEventAuthor = null;
         let editingClanEventAuthor = null;
 
-        // Gerenciamento Dinâmico de Hierarquia
+        // Hierarquia Administrativa Dinâmica
         let dynamicRoles = {
-            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"], permissions: "Gerenciar pedidos de recrutamento (Aprovar/Negar).\nGerenciar alianças (Adicionar/Remover clãs).\nAutorizar membros manualmente.\nSem permissão de exclusão (Exceto Luhnny)." },
-            event_admins: { members: ["SrLordM", "Bone"], permissions: "Criar, editar Global Events e Sorteios.\nRealizar sorteio e ver participantes.\nAprovar sugestões enviadas por membros.\nBloqueados na Área do Clã e Exclusões." },
-            mission_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"], permissions: "Criar missões diretamente.\nAprovar ou recusar sugestões de missões.\nConcluir missões e confirmar pagamentos." }
+            super_admins: { 
+                members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"], 
+                permissions: ["Gerenciar pedidos de recrutamento (Aprovar/Negar)", "Gerenciar alianças (Adicionar/Remover clãs)", "Autorizar membros manualmente", "Sem permissão de exclusão (Exceto Luhnny)"] 
+            },
+            event_admins: { 
+                members: ["SrLordM", "Bone"], 
+                permissions: ["Criar, editar Global Events e Sorteios", "Realizar sorteio e ver participantes", "Aprovar sugestões enviadas por membros", "Bloqueados na Área do Clã e Exclusões"] 
+            },
+            mission_admins: { 
+                members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"], 
+                permissions: ["Criar missões diretamente", "Aprovar ou recusar sugestões de missões", "Concluir missões e confirmar pagamentos"] 
+            }
         };
 
-        // Getters para compatibilidade com o código original
         const getSuperAdmins = () => dynamicRoles.super_admins.members;
         const getEventAdmins = () => dynamicRoles.event_admins.members;
         const getMissionAdmins = () => dynamicRoles.mission_admins.members;
@@ -349,7 +357,7 @@
             lucide.createIcons();
         };
 
-        // GESTÃO DINÂMICA DE CARGOS POR LUHNNY
+        // GESTÃO DINÂMICA DE CARGOS E PERMISSÕES POR LUHNNY
         window.renderPermissionsMgmt = () => {
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
             const container = document.getElementById('dynamic-permissions-grid');
@@ -362,6 +370,7 @@
                 const icon = roleKey === 'super_admins' ? 'crown' : roleKey === 'event_admins' ? 'calendar' : 'scroll';
                 const color = roleKey === 'super_admins' ? 'pink' : roleKey === 'event_admins' ? 'purple' : 'blue';
 
+                // Renderiza Membros
                 const membersList = role.members.map(m => `
                     <span class="bg-white px-2 py-1 rounded-md text-[10px] font-bold text-${color}-500 border border-${color}-100 flex items-center gap-1">
                         ${m}
@@ -369,25 +378,44 @@
                     </span>
                 `).join('');
 
-                const addInput = isLuhnny ? `
+                const addMemberInput = isLuhnny ? `
                     <div class="mt-4 flex gap-2">
-                        <input type="text" id="add-nick-${roleKey}" placeholder="Nick..." class="flex-1 text-[10px] p-1.5 border rounded-lg outline-none focus:border-${color}-300">
-                        <button onclick="window.addAdminRole('${roleKey}')" class="bg-${color}-500 text-white px-2 py-1 rounded-lg text-[10px] font-bold">ADD</button>
+                        <input type="text" id="add-nick-${roleKey}" placeholder="Novo Admin..." class="flex-1 text-[10px] p-1.5 border rounded-lg outline-none focus:border-${color}-300">
+                        <button onclick="window.addAdminRole('${roleKey}')" class="bg-${color}-500 text-white px-2 py-1 rounded-lg text-[10px] font-bold shadow-sm">ADD</button>
                     </div>
                 ` : '';
 
-                const permissionsArea = isLuhnny ? `
-                    <textarea id="desc-${roleKey}" onchange="window.updateRoleDesc('${roleKey}')" class="w-full text-[10px] bg-white border border-${color}-100 rounded-lg p-2 h-24 focus:border-${color}-300 outline-none">${role.permissions}</textarea>
-                ` : `<div class="flex-grow space-y-3 text-xs text-slate-600 mb-6">${role.permissions.split('\n').map(p => `<p class="flex items-start gap-2"><i data-lucide="check" class="w-3 h-3 mt-0.5 text-${color}-400"></i> ${p}</p>`).join('')}</div>`;
+                // Renderiza Permissões Dinâmicas
+                const permsArray = Array.isArray(role.permissions) ? role.permissions : [];
+                const permsList = permsArray.map((p, idx) => `
+                    <div class="flex items-start gap-2 bg-${color}-50/30 p-2 rounded-lg border border-${color}-100/50 group">
+                        <i data-lucide="check" class="w-3 h-3 mt-0.5 text-${color}-400 flex-shrink-0"></i>
+                        <span class="text-xs text-slate-600 flex-grow">${p}</span>
+                        ${isLuhnny ? `<button onclick="window.removePermission('${roleKey}', ${idx})" class="text-red-300 hover:text-red-500 transition opacity-0 group-hover:opacity-100 leading-none">×</button>` : ''}
+                    </div>
+                `).join('');
+
+                const addPermInput = isLuhnny ? `
+                    <div class="mt-4 flex gap-2">
+                        <input type="text" id="add-perm-${roleKey}" placeholder="Nova permissão..." class="flex-1 text-[10px] p-1.5 border rounded-lg outline-none focus:border-${color}-300">
+                        <button onclick="window.addPermission('${roleKey}')" class="bg-slate-700 text-white px-2 py-1 rounded-lg text-[10px] font-bold shadow-sm hover:bg-black transition">ADD</button>
+                    </div>
+                ` : '';
 
                 container.innerHTML += `
-                    <div class="bg-${color}-50/50 p-6 rounded-2xl border-2 border-${color}-100 flex flex-col">
-                        <h3 class="font-bold text-${color}-600 uppercase text-sm mb-4 flex items-center gap-2"><i data-lucide="${icon}" class="w-4 h-4"></i> ${label}</h3>
-                        ${permissionsArea}
-                        <div class="pt-4 border-t border-${color}-100 mt-4">
-                            <span class="text-[10px] font-bold text-slate-400 uppercase">Lista de Admins:</span>
+                    <div class="bg-white p-6 rounded-2xl border-2 border-${color}-100 flex flex-col card-shadow">
+                        <h3 class="font-bold text-${color}-600 uppercase text-sm mb-6 flex items-center gap-2 border-b border-${color}-50 pb-2"><i data-lucide="${icon}" class="w-4 h-4"></i> ${label}</h3>
+                        
+                        <div class="space-y-2 flex-grow">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Permissões do Cargo:</span>
+                            ${permsList}
+                            ${addPermInput}
+                        </div>
+
+                        <div class="pt-6 border-t border-${color}-50 mt-6">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-widest block mb-2">Membros com este Cargo:</span>
                             <div class="flex flex-wrap gap-1 mt-2">${membersList}</div>
-                            ${addInput}
+                            ${addMemberInput}
                         </div>
                     </div>
                 `;
@@ -417,12 +445,28 @@
             window.notify(`${nick} adicionado a ${roleKey}`, "success");
         };
 
-        window.updateRoleDesc = async (roleKey) => {
+        window.removePermission = async (roleKey, index) => {
             if (currentUser?.name !== "Luhnny") return;
-            const newDesc = document.getElementById(`desc-${roleKey}`).value;
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'permissions', roleKey), { ...dynamicRoles[roleKey], permissions: newDesc });
-            await saveLog("Alteração de Hierarquia", `Atualizou as permissões do cargo ${roleKey}.`);
-            window.notify("Permissões atualizadas!", "success");
+            const currentPerms = [...(dynamicRoles[roleKey].permissions || [])];
+            const removed = currentPerms.splice(index, 1);
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'permissions', roleKey), { ...dynamicRoles[roleKey], permissions: currentPerms });
+            await saveLog("Permissão Removida", `Removeu a permissão: "${removed}" de ${roleKey}.`);
+            window.notify("Permissão removida!", "info");
+        };
+
+        window.addPermission = async (roleKey) => {
+            if (currentUser?.name !== "Luhnny") return;
+            const input = document.getElementById(`add-perm-${roleKey}`);
+            const text = input.value.trim();
+            if (!text) return;
+            
+            const currentPerms = Array.isArray(dynamicRoles[roleKey].permissions) ? [...dynamicRoles[roleKey].permissions] : [];
+            const updatedPerms = [...currentPerms, text];
+            
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'permissions', roleKey), { ...dynamicRoles[roleKey], permissions: updatedPerms });
+            await saveLog("Permissão Adicionada", `Adicionou permissão em ${roleKey}: "${text}".`);
+            input.value = "";
+            window.notify("Nova permissão adicionada!", "success");
         };
 
         window.addMemberManual = async () => {
@@ -1121,7 +1165,6 @@
             const isSuperAdmin = currentUser && getSuperAdmins().includes(currentUser.name);
             const isEventAdmin = currentUser && getEventAdmins().includes(currentUser.name);
             const isMissionAdmin = currentUser && getMissionAdmins().includes(currentUser.name);
-            const isAnyAdmin = getAllAdmins().includes(currentUser?.name);
 
             const btnGerenciamento = document.getElementById('btn-gerenciamento');
             if (isLuhnny) btnGerenciamento?.classList.remove('hidden'); else btnGerenciamento?.classList.add('hidden');
@@ -1180,7 +1223,7 @@
         onAuthStateChanged(auth, async (u) => {
             if (!u) await signInAnonymously(auth);
             
-            // Listeners Firestore
+            // Listeners Firestore para Permissões Dinâmicas
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'permissions'), (s) => {
                 s.docs.forEach(doc => { dynamicRoles[doc.id] = doc.data(); });
                 window.updateUI();
@@ -1309,7 +1352,7 @@
     <div id="modal-confirm-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition hover:bg-slate-200 text-slate-500 uppercase">Não</button></div></div></div>
     <div id="modal-confirm-clan-giveaway-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Deletar Sorteio do Clã?</h3><div class="flex gap-4"><button onclick="window.confirmGiveawayDelete(true)" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-clan-giveaway-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition hover:bg-slate-200 text-slate-500 uppercase">Não</button></div></div></div>
     <div id="modal-confirm-alliance-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Aliança?</h3><div class="flex gap-4"><button onclick="window.confirmAllianceDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-alliance-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition text-slate-500 uppercase">Não</button></div></div></div>
-    <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3><div class="flex gap-4"><button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Não</button></div></div></div>
+    <div id="modal-confirm-member-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Membro?</h3><div class="flex gap-4"><button onclick="window.confirmMemberDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-member-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition text-slate-500 uppercase">Não</button></div></div></div>
     <div id="modal-edit-member" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Editar Membro: <span id="edit-mem-nick" class="text-pink-500"></span></h3><div class="space-y-4"><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Aniversário:</label><input type="text" id="edit-mem-aniv" class="w-full p-3 bg-slate-50 border rounded-xl outline-none"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Disponibilidade:</label><input type="text" id="edit-mem-disp" class="w-full p-3 bg-slate-50 border rounded-xl outline-none"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tags:</label><input type="text" id="edit-mem-tags" class="w-full p-3 bg-slate-50 border rounded-xl outline-none"></div><div><label class="block text-xs font-bold text-slate-400 uppercase mb-1">Foto:</label><input type="file" id="edit-mem-img-input" accept="image/*" class="w-full text-xs text-slate-500 cursor-pointer"></div></div><div class="flex gap-4 mt-8"><button onclick="window.saveMemberEdit()" class="flex-1 pink-gradient text-white font-bold py-3 rounded-xl shadow-lg uppercase">Salvar</button><button onclick="window.closeModal('modal-edit-member')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500 uppercase">Cancelar</button></div></div></div>
 </body>
 </html>
