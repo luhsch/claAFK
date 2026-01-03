@@ -70,6 +70,7 @@
         let allAllianceRequests = [];
         let allApplications = [];
         let allIdentities = [];
+        let allUsers = []; // Lista de contas registradas
         let allMissions = [];
         let allCompletedMissions = []; 
         let allGiveaways = []; 
@@ -270,7 +271,7 @@
                 loginForm.classList.add('hidden');
                 registerForm.classList.remove('hidden');
                 tabRegister.classList.add('text-pink-600', 'border-b-2', 'border-pink-600');
-                tabRegister.classList.remove('text-slate-400');
+                tabRegister.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
                 tabLogin.classList.remove('text-pink-600', 'border-b-2', 'border-pink-600');
                 tabLogin.classList.add('text-slate-400');
                 window.populateAllySelectRegister();
@@ -302,6 +303,10 @@
                 console.error(e);
                 window.notify("Erro ao fazer login.", "error", false);
             }
+        };
+
+        window.forgotPassword = () => {
+            window.notify("Fale com a Luhnny (@luhsch) no Discord para resetar sua senha!", "info");
         };
 
         window.handleRegister = async () => {
@@ -525,6 +530,7 @@
         };
 
         window.requestResetAccount = (nick) => {
+            if (!nick) return window.notify("Digite o nick do jogador!", "error");
             nickToResetAccount = nick;
             document.getElementById('reset-nick-display').innerText = nick;
             window.openModal('modal-confirm-account-reset');
@@ -753,8 +759,7 @@
             const canManage = window.hasPermission('MANAGE_MISSIONS');
             const canDeleteMissions = window.hasPermission('DELETE_MISSIONS');
             const suggestions = allMissions.filter(m => m.status === 'suggestion');
-            if (canManage && suggestions.length > 0) {
-                suggSection?.classList.remove('hidden');
+            if (canManage && suggestions.length > 0) { suggSection?.classList.remove('hidden'); 
                 suggestions.forEach(m => {
                     suggList.innerHTML += `<div class="bg-yellow-50 border-2 border-yellow-200 p-6 rounded-3xl card-shadow flex flex-col justify-between"><div><span class="bg-yellow-200 text-yellow-700 px-3 py-1 rounded-lg text-[10px] font-bold uppercase w-fit mb-3 block">Sugestão de ${m.createdBy}</span><h4 class="text-lg font-bold text-slate-700 mb-2 leading-tight">${m.objective}</h4><p class="text-sm text-pink-500 font-semibold mb-4">Recompensa: ${m.reward}</p></div><div class="flex gap-2 border-t border-yellow-100 pt-4"><button onclick="window.approveMission('${m.id}')" class="flex-1 bg-green-500 text-white py-2 rounded-xl font-bold text-xs uppercase shadow-md hover:bg-green-600 transition">Aprovar</button><button onclick="window.requestDeleteMission('${m.id}')" class="px-4 bg-red-100 text-red-500 rounded-xl font-bold text-xs uppercase hover:bg-red-200 transition">Recusar</button></div></div>`;
                 });
@@ -912,7 +917,7 @@
             if (!giv) return;
             const currentParts = giv.participants || [];
             if (currentParts.includes(currentUser.name)) return window.notify("Você já está participando!", "info", false);
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: [...currentParts, currentUser.name] });
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'coll', id), { participants: [...currentParts, currentUser.name] });
             window.notify("Participação confirmada!", "success", false);
         };
 
@@ -1093,13 +1098,46 @@
         window.confirmAllianceDelete = async () => { if (!allianceToDeleteId) return; const ali = allAlliances.find(a => a.id === allianceToDeleteId); await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'alliances', allianceToDeleteId)); await saveLog("Exclusão de Aliança", `Encerrou aliança com clã ${ali?.name}`); window.closeModal('modal-confirm-alliance-delete'); };
 
         window.renderIdentities = function() {
-            const canManage = window.hasPermission('MANAGE_MEMBERS'); const allyIdenC = document.getElementById('ally-identities-section'); const allyIdenL = document.getElementById('ally-identities-list'); const memIdenC = document.getElementById('member-identities-section'); const memIdenL = document.getElementById('member-identities-list');
+            const canManage = window.hasPermission('MANAGE_MEMBERS'); 
+            const allyIdenC = document.getElementById('ally-identities-section'); 
+            const allyIdenL = document.getElementById('ally-identities-list'); 
+            const memIdenC = document.getElementById('member-identities-section'); 
+            const memIdenL = document.getElementById('member-identities-list');
             const isLuhnny = currentUser && currentUser.name === "Luhnny";
-            if (!canManage) { if(allyIdenC) allyIdenC.classList.add('hidden'); if(memIdenC) memIdenC.classList.add('hidden'); return; }
-            const members = allIdentities.filter(i => { const nickLower = (i.nick || "").toLowerCase(); return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickLower) || allAuthorizedMembers.some(m => m.nick.toLowerCase() === nickLower); });
-            const allies = allIdentities.filter(i => !members.some(m => m.id === i.id));
-            if (allyIdenC && allyIdenL) { allyIdenC.classList.remove('hidden'); let alliesHtml = ''; if (allies.length === 0) alliesHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>'; else { allies.forEach(i => { alliesHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><div class="flex gap-1">${isLuhnny ? `<button title="Resetar Senha" onclick="window.requestResetAccount('${i.nick}')" class="text-pink-400 hover:text-pink-600 transition"><i data-lucide="key" class="w-4 h-4"></i></button>`:''}<button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`; }); } allyIdenL.innerHTML = alliesHtml; }
-            if (memIdenC && memIdenL) { memIdenC.classList.remove('hidden'); let membersHtml = ''; if (members.length === 0) membersHtml = '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>'; else { members.forEach(i => { membersHtml += `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${i.nick || 'Desconhecido'}</span><div class="flex gap-1">${isLuhnny ? `<button title="Resetar Senha" onclick="window.requestResetAccount('${i.nick}')" class="text-pink-400 hover:text-pink-600 transition"><i data-lucide="key" class="w-4 h-4"></i></button>`:''}<button onclick="window.deleteIdentity('${i.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`; }); } memIdenL.innerHTML = membersHtml; }
+            
+            if (!canManage) { 
+                if(allyIdenC) allyIdenC.classList.add('hidden'); 
+                if(memIdenC) memIdenC.classList.add('hidden'); 
+                return; 
+            }
+
+            // Unifica as contas reais (do users) e identidades para garantir que Luhnny veja todos para resetar
+            const accounts = [...allUsers];
+            allIdentities.forEach(iden => {
+                if (!accounts.find(acc => (acc.name || "").toLowerCase() === iden.id.toLowerCase())) {
+                    accounts.push({ name: iden.nick, role: iden.role || 'ally' });
+                }
+            });
+
+            const members = accounts.filter(i => { 
+                const nickLower = (i.name || i.nick || "").toLowerCase(); 
+                return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickLower) || allAuthorizedMembers.some(m => m.nick.toLowerCase() === nickLower); 
+            });
+            const allies = accounts.filter(i => !members.some(m => (m.name || m.nick || "").toLowerCase() === (i.name || i.nick || "").toLowerCase()));
+
+            const createIdenCard = (i) => {
+                const name = i.name || i.nick;
+                return `<div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between"><span class="text-xs font-bold text-slate-600">${name || 'Desconhecido'}</span><div class="flex gap-1">${isLuhnny ? `<button title="Resetar Senha" onclick="window.requestResetAccount('${name}')" class="text-pink-400 hover:text-pink-600 transition"><i data-lucide="key" class="w-4 h-4"></i></button>`:''}<button onclick="window.deleteIdentity('${(name||'').toLowerCase()}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button></div></div>`;
+            };
+
+            if (allyIdenC && allyIdenL) { 
+                allyIdenC.classList.remove('hidden'); 
+                allyIdenL.innerHTML = allies.length === 0 ? '<p class="text-slate-400 text-xs italic col-span-full">Nenhum aliado vinculado.</p>' : allies.map(createIdenCard).join(''); 
+            }
+            if (memIdenC && memIdenL) { 
+                memIdenC.classList.remove('hidden'); 
+                memIdenL.innerHTML = members.length === 0 ? '<p class="text-slate-400 text-xs italic col-span-full">Nenhum membro vinculado.</p>' : members.map(createIdenCard).join(''); 
+            }
             lucide.createIcons();
         };
 
@@ -1300,6 +1338,12 @@
                 window.updateUI();
             });
 
+            // Listener para todos os usuários registrados para que a Luhnny possa vê-los na lista de gerenciamento
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'users'), (s) => { 
+                allUsers = s.docs.map(d => ({id: d.id, ...d.data()})); 
+                window.renderIdentities(); 
+            });
+
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) { isRecruitmentOpen = s.data().isOpen; initialRecruitmentLoad = false; window.updateUI(); } });
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members'), (s) => { hiddenStaticMembers = s.exists() ? (s.data().nicks || []) : []; window.renderMembers(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); initialEventLoad = false; });
@@ -1366,6 +1410,16 @@
 
             <div id="mgmt-content-permissions-mgmt" class="hidden">
                 <div class="space-y-10">
+                    <!-- Reset de Senha Manual (Luhnny pode digitar qualquer nick aqui) -->
+                    <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200 max-w-5xl mx-auto">
+                        <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase mb-4 tracking-tighter leading-tight"><i data-lucide="key"></i> Resetar Senha Manual</h2>
+                        <p class="text-sm text-slate-500 mb-6">Se um jogador (como o K0ssh1_) não aparecer na lista abaixo, digite o nick dele aqui para resetar a conta.</p>
+                        <div class="flex gap-4">
+                            <input type="text" id="manual-reset-nick" placeholder="Nick do Jogador..." class="flex-1 p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
+                            <button onclick="window.requestResetAccount(document.getElementById('manual-reset-nick').value.trim())" class="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-pink-600 transition uppercase">Resetar Conta</button>
+                        </div>
+                    </div>
+
                     <!-- CONTROLE DE HIERARQUIA ADMINISTRATIVA DINÂMICO -->
                     <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-100 max-w-6xl mx-auto">
                         <div class="flex items-center justify-between mb-8">
@@ -1404,7 +1458,7 @@
     </main>
     <footer class="py-10 text-center text-pink-400 text-sm uppercase tracking-tighter font-semibold">Clã AFK fundado em 2025 por Luhnny</footer>
     <!-- MODAIS -->
-    <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg"><div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl relative overflow-hidden text-center"><div class="flex border-b mb-6"><button id="tab-mode-login" onclick="window.toggleAuthMode('login')" class="flex-1 py-4 text-base font-bold text-pink-600 border-b-2 border-pink-600 uppercase tracking-tighter transition-all">Entrar</button><button id="tab-mode-register" onclick="window.toggleAuthMode('register')" class="flex-1 py-4 text-base font-bold text-slate-400 uppercase tracking-tighter transition-all">Criar Conta</button></div><div id="auth-login-form" class="space-y-4 text-left"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label><input type="text" id="login-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Sua Senha:</label><input type="password" id="login-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><button onclick="window.handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Acessar</button></div><div id="auth-register-form" class="hidden space-y-4 text-left"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label><input type="text" id="reg-nick" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Crie uma Senha:</label><input type="password" id="reg-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Tipo de Conta:</label><select id="reg-type" onchange="window.toggleRegisterType()" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><option value="member">Membro do Clã</option><option value="ally">Aliado</option></select><div id="reg-clan-div" class="hidden"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Selecione seu Clã:</label><select id="reg-clan" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"></select></div><label class="block text-sm font-bold text-pink-500 uppercase mb-1 ml-2">Código de Acesso:</label><input type="password" id="reg-invite" class="w-full bg-pink-50 border-2 border-pink-200 p-3 rounded-xl outline-none focus:border-pink-400 text-pink-600 font-bold placeholder-pink-300" placeholder="Digite o código..."><button onclick="window.handleRegister()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Registrar</button></div><button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-6 uppercase font-semibold text-center hover:text-pink-400 transition-colors">Fechar janela</button></div></div>
+    <div id="modal-login" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg"><div class="bg-white rounded-3xl p-8 w-full max-md shadow-2xl relative overflow-hidden text-center"><div class="flex border-b mb-6"><button id="tab-mode-login" onclick="window.toggleAuthMode('login')" class="flex-1 py-4 text-base font-bold text-pink-600 border-b-2 border-pink-600 uppercase tracking-tighter transition-all">Entrar</button><button id="tab-mode-register" onclick="window.toggleAuthMode('register')" class="flex-1 py-4 text-base font-bold text-slate-400 uppercase tracking-tighter transition-all">Criar Conta</button></div><div id="auth-login-form" class="space-y-4 text-left"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label><input type="text" id="login-user" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Sua Senha:</label><input type="password" id="login-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><button onclick="window.handleLogin()" class="w-full pink-gradient text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Acessar</button><button onclick="window.forgotPassword()" class="w-full mt-2 text-pink-400 text-[10px] font-bold uppercase hover:underline text-center">Esqueci minha senha</button></div><div id="auth-register-form" class="hidden space-y-4 text-left"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Nick:</label><input type="text" id="reg-nick" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Crie uma Senha:</label><input type="password" id="reg-pass" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Tipo de Conta:</label><select id="reg-type" onchange="window.toggleRegisterType()" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"><option value="member">Membro do Clã</option><option value="ally">Aliado</option></select><div id="reg-clan-div" class="hidden"><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Selecione seu Clã:</label><select id="reg-clan" class="w-full bg-slate-50 border-2 p-3 rounded-xl outline-none focus:border-pink-300"></select></div><label class="block text-sm font-bold text-pink-500 uppercase mb-1 ml-2">Código de Acesso:</label><input type="password" id="reg-invite" class="w-full bg-pink-50 border-2 border-pink-200 p-3 rounded-xl outline-none focus:border-pink-400 text-pink-600 font-bold placeholder-pink-300" placeholder="Digite o código..."><button onclick="window.handleRegister()" class="w-full bg-slate-800 text-white font-bold py-3 rounded-xl shadow-lg transition active:scale-95 uppercase mt-4">Registrar</button></div><button onclick="window.closeModal('modal-login')" class="w-full text-slate-400 text-xs mt-6 uppercase font-semibold text-center hover:text-pink-400 transition-colors">Fechar janela</button></div></div>
     <div id="modal-confirm-account-reset" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-4 text-slate-800 uppercase tracking-tighter leading-tight">Resetar Conta?</h3><p class="text-sm text-slate-500 mb-6">Isso apagará o registro de login de <strong id="reset-nick-display" class="text-pink-500"></strong>. O jogador precisará criar uma conta nova.</p><div class="flex gap-4"><button onclick="window.confirmAccountReset()" class="flex-1 bg-pink-500 text-white font-bold py-3 rounded-xl shadow-lg transition hover:bg-pink-600">Sim, Resetar</button><button onclick="window.closeModal('modal-confirm-account-reset')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition text-slate-500 hover:bg-slate-200">Cancelar</button></div></div></div>
     <div id="modal-confirm-rec-delete" class="hidden fixed inset-0 z-[1200] flex items-center justify-center p-4 modal-bg text-center"><div class="bg-white rounded-3xl p-8 w-full max-sm shadow-2xl transition-all"><h3 class="text-xl font-bold mb-6 text-slate-800 uppercase tracking-tighter leading-tight">Remover Candidatura?</h3><div class="flex gap-4"><button onclick="window.confirmRecDelete()" class="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg transition hover:bg-red-600 uppercase">Sim</button><button onclick="window.closeModal('modal-confirm-rec-delete')" class="flex-1 bg-slate-100 py-3 rounded-xl font-bold transition hover:bg-slate-200 text-slate-500 uppercase">Não</button></div></div></div>
     <div id="modal-create-mission" class="hidden fixed inset-0 z-[1100] flex items-center justify-center p-4 modal-bg text-left"><div class="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl"><h3 class="text-2xl font-bold text-pink-600 mb-6 uppercase tracking-tighter leading-tight">Nova Missão</h3><form id="form-create-mission" onsubmit="event.preventDefault(); window.createMission();" class="space-y-4"><div><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Tag:</label><select id="mis-tag" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none"><option value="Farm">Farm</option><option value="Build">Build</option><option value="Recursos">Recursos</option><option value="Exploração">Exploração</option></select></div><div><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Objetivo:</label><input type="text" id="mis-objective" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none"></div><div><label class="block text-sm font-bold text-slate-400 uppercase mb-1 ml-2">Recompensa:</label><input type="text" id="mis-reward" required class="w-full p-3 bg-slate-50 border rounded-xl focus:border-pink-300 outline-none"></div><button type="submit" class="w-full pink-gradient text-white font-bold py-4 rounded-xl shadow-lg uppercase mt-4">Criar Missão</button></form></div></div>
