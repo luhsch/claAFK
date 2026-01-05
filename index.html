@@ -374,7 +374,7 @@
                 const el = document.getElementById('subtab-' + t);
                 const btn = document.getElementById('subbtn-' + t);
                 if (t === sub) { el.classList.remove('hidden'); btn.classList.add('subtab-active'); btn.classList.remove('bg-slate-100', 'text-slate-500'); } 
-                else { el.classList.add('hidden'); btn.classList.remove('subtab-active'); btn.classList.add('bg-slate-100', 'text-slate-500'); }
+                else { el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('bg-slate-100', 'text-slate-500'); }
             });
             lucide.createIcons();
         };
@@ -917,7 +917,7 @@
             if (!giv) return;
             const currentParts = giv.participants || [];
             if (currentParts.includes(currentUser.name)) return window.notify("Você já está participando!", "info", false);
-            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'coll', id), { participants: [...currentParts, currentUser.name] });
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: [...currentParts, currentUser.name] });
             window.notify("Participação confirmada!", "success", false);
         };
 
@@ -1299,12 +1299,13 @@
                 
                 if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); }
                 
-                if (canManageMissions) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
-                if (canManageClanGiv) { aClanGivBtn?.classList.remove('hidden'); } else { aClanGivBtn?.classList.add('hidden'); }
+                // AJUSTE: Permite que membros vejam controles de missão, sorteio e evento para dar sugestões
+                if (currentUser && !currentUser.isAlly) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
+                if (currentUser && !currentUser.isAlly) { aClanGivBtn?.classList.remove('hidden'); } else { aClanGivBtn?.classList.add('hidden'); }
                 
-                if (canManageGlobalEvents) { aEventBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); }
-                if (canManageClanEvents) { aClanEventPanelBtn?.classList.remove('hidden'); } else { aClanEventPanelBtn?.classList.add('hidden'); }
-                if (canManageGlobalGiv) { aGiveawayBtn?.classList.remove('hidden'); } else { aGiveawayBtn?.classList.add('hidden'); }
+                if (currentUser) { aEventBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); }
+                if (currentUser && !currentUser.isAlly) { aClanEventPanelBtn?.classList.remove('hidden'); } else { aClanEventPanelBtn?.classList.add('hidden'); }
+                if (currentUser) { aGiveawayBtn?.classList.remove('hidden'); } else { aGiveawayBtn?.classList.add('hidden'); }
                 
                 if (window.hasPermission('MANAGE_MEMBERS')) btnAddMemberManual?.classList.remove('hidden'); else btnAddMemberManual?.classList.add('hidden');
                 
