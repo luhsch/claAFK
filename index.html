@@ -152,14 +152,23 @@
             { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
             { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
             { nick: "Lagartuuuxaaa", role: "Co-Líder", tags: ["spvp", "cpvp"], aniv: "01/07", disp: "22h - 02h", img: "lagartuuuxaaa.png" },
+            { nick: "iaruchy", tags: ["cpvp"], aniv: "18/04", disp: "Toda hora", img: "iaruchy.png" },
+            { nick: "1gcy", tags: ["cpvp", "build"], aniv: "05/04", disp: "Toda hora", img: "1gcy.png" },
             { nick: "Pardas01", tags: ["cpvp", "builder", "farm"], aniv: "16/06", disp: "Tarde e Noite", img: "pardas01.png" },
             { nick: "baiano019", tags: ["builder"], aniv: "14/05", disp: "Noite", img: "baiano019.png" },
+            { nick: "Raitzz_", tags: ["farm"], aniv: "22/03", disp: "Tarde e Manhã", img: "raitzz_.png" },
             { nick: "Invisivel", tags: ["spvp", "cpvp", "builder", "farm"], aniv: "28/07", disp: "Noite", img: "invisivel.png" },
             { nick: "NeverPuzzle", tags: ["spvp", "cpvp", "farm"], aniv: "11/08", disp: "Tarde", img: "neverpuzzle.png" },
+            { nick: "chorapropai", tags: ["cpvp", "farm"], aniv: "10/01", disp: "Variável", img: "chorapropai.png" },
             { nick: "felpipoca", tags: ["spvp", "farm"], aniv: "21/01", disp: "Dia e Madrugada", img: "felpipoca.png" },
+            { nick: "1aswd", tags: ["spvp", "cpvp", "builder"], aniv: "19/09", disp: "Dia todo", img: "1aswd.png" },
             { nick: "ynSunn", tags: ["spvp", "builder", "farm"], aniv: "23/08", disp: "Tarde e Noite", img: "ynsunn.png" },
+            { nick: "labubusista", tags: ["spvp", "cpvp", "builder"], aniv: "17/02", disp: "Quase sempre", img: "labubusista.png" },
             { nick: "TheP1nk", tags: ["pvp", "cpvp", "builder"], aniv: "10/07", disp: "Tarde e Noite", img: "thep1nk.png" },
             { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
+            { nick: "_Vzkls14", tags: ["builder"], aniv: "22/03", disp: "02h-21h", img: "vzkls14.png" },
+            { nick: "zKingPrime", tags: ["spvp", "cpvp"], aniv: "09/10", disp: "Toda hora", img: "zkingprime.png" },
+            { nick: "PyromaniacVV", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "pyromaniacvv.png" },
             { nick: "festinha", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "festinha.png" }
         ];
 
@@ -364,8 +373,16 @@
             tabs.forEach(t => {
                 const el = document.getElementById('subtab-' + t);
                 const btn = document.getElementById('subbtn-' + t);
-                if (t === sub) { el.classList.remove('hidden'); btn.classList.add('subtab-active'); btn.classList.remove('bg-slate-100', 'text-slate-500'); } 
-                else { el.classList.add('hidden'); btn.classList.remove('tab-active'); btn.classList.add('bg-slate-100', 'text-slate-500'); }
+                if (t === sub) { 
+                    el.classList.remove('hidden'); 
+                    btn.classList.add('subtab-active'); 
+                    btn.classList.remove('bg-slate-100', 'text-slate-500'); 
+                } 
+                else { 
+                    el.classList.add('hidden'); 
+                    btn.classList.remove('subtab-active'); 
+                    btn.classList.add('bg-slate-100', 'text-slate-500'); 
+                }
             });
             lucide.createIcons();
         };
@@ -669,8 +686,13 @@
                 } else {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', memberToDelete.id), { status: 'removed' });
                 }
-                await saveLog("Remoção de Membro", `Removeu ${memberToDelete.nick} do clã.`);
-                window.notify(`Membro ${memberToDelete.nick} removido.`, "success", false);
+                
+                // Resetar a conta do usuário para que ele perca o acesso às abas de membro
+                const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', memberToDelete.nick.toLowerCase());
+                await deleteDoc(userRef);
+                
+                await saveLog("Remoção de Membro", `Removeu ${memberToDelete.nick} do clã e invalidou seu acesso.`);
+                window.notify(`Membro ${memberToDelete.nick} removido e acesso invalidado.`, "success", false);
             } catch (e) { console.error(e); window.notify("Erro ao remover membro.", "error", false); }
             window.closeModal('modal-confirm-member-delete');
             memberToDelete = null;
@@ -722,7 +744,7 @@
                     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'completed_missions'), { objective: mission.objective, reward: mission.reward, tag: mission.tag, takenBy: mission.takenBy, createdBy: mission.createdBy, paymentConfirmed: false, completedAt: Date.now() });
                     await saveLog("Missão Concluída", `Membro ${mission.takenBy} concluiu a missão: ${mission.objective}`);
                 } else if (mission) {
-                    await saveLog("Remoção de Missão", `Removeu a missão aberta: ${mission.objective}`);
+                    await saveLog("Remoção de Missão", `Removeu la missão aberta: ${mission.objective}`);
                 }
                 await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'missions', missionToDeleteId));
                 window.notify("Missão concluída com sucesso!", "success", false);
@@ -859,7 +881,7 @@
             const ev = list.find(e => e.id === id);
             if (ev && ev.participants) {
                 const next = ev.participants.filter(p => p !== nick);
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: next });
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'coll', id), { participants: next });
                 await saveLog("Remoção de Participante (Evento)", `Removeu ${nick} do evento ${ev.title}`);
                 window.notify(`Removido(a): ${nick}`, "info");
             }
@@ -1227,11 +1249,19 @@
             const localId = localStorage.getItem('afk_recruitment_id'); const statusContainer = document.getElementById('my-recruitment-status');
             if (!statusContainer) return; if (!localId) { statusContainer.innerHTML = ''; return; }
             if (initialRecruitmentListLoad) { statusContainer.innerHTML = '<div class="mb-10 text-slate-400 italic text-sm">Verificando status...</div>'; return; }
+            
             let myApp = allApplications.find(a => a.id === localId);
-            let displayStatus = myApp ? myApp.status : 'pendente'; let displayNick = myApp ? myApp.nick : 'Candidato'; let displayHandledBy = myApp ? myApp.handledBy : null;
+            
+            // CORREÇÃO: Se existe o ID no local mas não foi encontrado no banco (porque Luhnny apagou), 
+            // assumimos que a decisão final foi 'negado', a menos que o doc ainda exista com outro status.
+            let displayStatus = myApp ? myApp.status : 'negado'; 
+            let displayNick = myApp ? myApp.nick : 'Candidato'; 
+            let displayHandledBy = myApp ? myApp.handledBy : null;
+            
             const colors = { aprovado: 'bg-green-50 border-green-200 text-green-600', negado: 'bg-red-50 border-red-200 text-red-600', pendente: 'bg-yellow-50 border-yellow-200 text-yellow-600' };
             const icon = { aprovado: 'check-circle', negado: 'x-circle', pendente: 'clock' };
             const msg = { aprovado: 'Parabéns! Foste aceito no Clã AFK!', negado: 'Infelizmente sua candidatura não foi aceita desta vez.', pendente: 'A tua candidatura está em análise. Aguarda!' };
+            
             const statusClass = colors[displayStatus] || colors['pendente']; const statusIcon = icon[displayStatus] || 'clock'; const statusMsg = msg[displayStatus] || 'Status desconhecido';
             statusContainer.innerHTML = `<div class="mb-10 p-8 rounded-3xl border-2 text-center ${statusClass} shadow-lg transform transition-all"><div class="flex justify-center mb-4"><i data-lucide="${statusIcon}" class="w-12 h-12"></i></div><h3 class="text-2xl font-extrabold uppercase mb-2 tracking-tighter">${displayStatus.toUpperCase()}</h3><p class="font-medium text-lg opacity-90 leading-tight">${statusMsg}</p><p class="mt-4 text-xs font-bold opacity-60 uppercase">Nick: ${displayNick}</p>${displayHandledBy ? `<p class="mt-1 text-[10px] font-bold opacity-50 uppercase">Analisado por: ${displayHandledBy}</p>` : ''}</div>`; lucide.createIcons();
         };
@@ -1288,14 +1318,24 @@
 
                 if (canManageAlliances) { aAllyBtn?.classList.remove('hidden'); } else { aAllyBtn?.classList.add('hidden'); }
                 
-                if (!currentUser.isAlly) { aClanAreaBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); }
+                // Verificação em tempo real de se o jogador AINDA é um membro oficial
+                let isActuallyMember = false;
+                if (!currentUser.isAlly) {
+                    const nl = currentUser.name.toLowerCase();
+                    const isStatic = ALLOWED_MEMBERS.some(m => m.toLowerCase() === nl) && !hiddenStaticMembers.includes(currentUser.name);
+                    const isApproved = allApplications.some(app => app.nick.toLowerCase() === nl && app.status === 'aprovado');
+                    const isManual = allAuthorizedMembers.some(m => m.nick.toLowerCase() === nl);
+                    isActuallyMember = isStatic || isApproved || isManual;
+                }
+
+                if (isActuallyMember) { aClanAreaBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); }
                 
                 // AJUSTE: Permite que membros vejam controles de missão, sorteio e evento para dar sugestões
-                if (currentUser && !currentUser.isAlly) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
-                if (currentUser && !currentUser.isAlly) { aClanGivBtn?.classList.remove('hidden'); } else { aClanGivBtn?.classList.add('hidden'); }
+                if (isActuallyMember) { aMissionAdmin?.classList.remove('hidden'); } else { aMissionAdmin?.classList.add('hidden'); }
+                if (isActuallyMember) { aClanGivBtn?.classList.remove('hidden'); } else { aClanGivBtn?.classList.add('hidden'); }
                 
                 if (currentUser) { aEventBtn?.classList.remove('hidden'); } else { aEventBtn?.classList.add('hidden'); }
-                if (currentUser && !currentUser.isAlly) { aClanEventPanelBtn?.classList.remove('hidden'); } else { aClanEventPanelBtn?.classList.add('hidden'); }
+                if (isActuallyMember) { aClanEventPanelBtn?.classList.remove('hidden'); } else { aClanEventPanelBtn?.classList.add('hidden'); }
                 if (currentUser) { aGiveawayBtn?.classList.remove('hidden'); } else { aGiveawayBtn?.classList.add('hidden'); }
                 
                 if (window.hasPermission('MANAGE_MEMBERS')) btnAddMemberManual?.classList.remove('hidden'); else btnAddMemberManual?.classList.add('hidden');
@@ -1377,7 +1417,7 @@
         <div id="tab-membros" class="hidden"><div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2><div class="flex items-center gap-4"><div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div></div></div><div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left"></div></div>
         <div id="tab-area-cla" class="hidden"><div class="max-w-4xl mx-auto mb-8 flex justify-center gap-4 flex-wrap"><button onclick="window.switchSubTab('eventos-cla')" id="subbtn-eventos-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Eventos do Clã</button><button onclick="window.switchSubTab('sorteios-cla')" id="subbtn-sorteios-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Sorteios do Clã</button><button onclick="window.switchSubTab('missoes-cla')" id="subbtn-missoes-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Missões do Clã</button></div><div id="subtab-eventos-cla"><div id="clan-suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Internas</h3><div id="clan-suggested-events-list"></div></div><div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-purple-500 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="swords"></i> Eventos Internos</h2><button id="btn-clan-event-panel" onclick="window.openCreateClanEventModal()" class="hidden bg-purple-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-purple-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir</button></div><div id="clan-active-events-list"></div><div id="clan-no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-purple-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-purple-400 mb-2 uppercase">Sem eventos internos</h3><p class="text-slate-500 text-lg">Sugira algo novo!</p></div><div class="mt-16 border-t border-purple-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico Interno</h3><div id="clan-history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div></div></div><div id="subtab-sorteios-cla" class="hidden"><div id="btn-admin-clan-giveaway" class="hidden mb-8 text-center"><button onclick="window.openCreateGiveawayModal(true)" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase flex items-center gap-2 mx-auto"><i data-lucide="gift"></i> Novo Sorteio do Clã</button></div><div id="clan-giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div></div><div id="subtab-missoes-cla" class="hidden"><div id="mission-suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="message-square"></i> Sugestões de Missão (Luhnny)</h3><div id="suggested-missions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div></div><div id="admin-mission-controls" class="hidden mb-8 text-center"><button onclick="window.openModal('modal-create-mission')" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto"><i data-lucide="plus-circle"></i> Nova Missão</button></div><div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div><div class="mt-16 border-t border-purple-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico de Missões</h3><div id="completed-missions-list" class="grid grid-cols-1 gap-3 max-w-4xl mx-auto"></div></div></div></div>
         <div id="tab-eventos" class="hidden"><div id="suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Pendentes</h3><div id="suggested-events-list"></div></div><div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="calendar-heart"></i> Cronograma</h2><button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir Evento</button></div><div id="active-events-list"></div><div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3><p class="text-slate-500 text-lg">Novidades em breve!</p></div><div class="mt-16 border-t border-pink-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico</h3><div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div></div></div>
-        <div id="tab-sorteios" class="hidden"><div id="btn-admin-giveaway" class="hidden mb-8 text-center"><button onclick="window.openCreateGiveawayModal()" class="bg-pink-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto"><i data-lucide="gift"></i> Novo Sorteio</button></div><div id="giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div></div>
+        <div id="tab-sorteios" class="hidden"><div id="btn-admin-giveaway" class="hidden mb-8 text-center"><button onclick="window.openCreateGiveawayModal()" class="bg-pink-50 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto"><i data-lucide="gift"></i> Novo Sorteio</button></div><div id="giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div></div>
         <div id="tab-aliancas" class="hidden text-center"><div id="alliance-requests-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-yellow-100 text-center"><h3 class="text-xl font-bold text-yellow-600 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="clock" class="w-6 h-6"></i> Solicitações Pendentes (Luhnny)</h3><div id="alliance-requests-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div></div><div class="flex flex-col md:flex-row justify-between items-center mb-10 gap-4 md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="handshake" class="w-6 h-6"></i> Clãs Aliados</h2><button id="admin-alliance-panel" onclick="window.openModal('modal-admin-alliance')" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition uppercase leading-tight tracking-tighter">Adicionar Aliança</button></div><div id="alliances-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div>
         <div id="tab-recrutamento" class="hidden text-center"><button id="luhnny-recruitment-toggle" onclick="window.toggleRecruitmentStatus()" class="hidden"></button><div id="admin-recruitment-section" class="hidden mb-12 bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200"><h2 class="text-2xl font-bold text-pink-600 mb-8 flex items-center gap-2 justify-center uppercase">Gerenciar Pedidos</h2><div id="admin-applications-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div></div><div id="my-recruitment-status" class="max-w-3xl mx-auto"></div><div id="recruitment-closed-message" class="hidden bg-white p-12 rounded-3xl card-shadow border-2 border-dashed border-red-200 text-center max-w-3xl mx-auto transition-all"><div class="p-4 bg-red-50 text-red-500 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-6 shadow-inner"><i data-lucide="lock" class="w-8 h-8"></i></div><h2 class="text-3xl font-extrabold text-red-600 mb-2 uppercase leading-tight tracking-tighter">Recrutamento Fechado</h2><p class="text-slate-500 leading-relaxed font-medium">Neste momento não estamos a aceitar candidaturas. Tenta mais tarde!</p></div><div id="recruitment-form-section" class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-3xl mx-auto text-center"><h2 class="text-3xl font-bold text-pink-500 mb-8 uppercase tracking-tighter">FORMULÁRIO</h2><form id="form-recruitment" onsubmit="event.preventDefault(); window.requestRecruitmentReview();" class="grid grid-cols-1 md:grid-cols-2 gap-6 text-left"><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Nick*:</label><input type="text" id="rec-nick" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Discord*:</label><input type="text" id="rec-discord" required class="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Idade*:</label><input type="number" id="rec-idade" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Tempo de Jogo (h)*:</label><input type="number" id="rec-tempo" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Simple Voice?*</label><select id="rec-voice" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sim">Sim</option><option value="Não">Não</option></select></div><div class="col-span-full"><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Clãs anteriores*:</label><input type="text" id="rec-clas" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Bom em:*</label><select id="rec-combate" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="cpvp">CPVP</option><option value="spvp">SPVP</option><option value="ambos">Ambos</option><option value="nenhum">Nenhum</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Construção*:</label><select id="rec-build" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não construo">Não construo</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Farm*:</label><select id="rec-farm" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="Sou bom">Sou bom</option><option value="Básico">Básico</option><option value="Não faço farm">Não faço farm</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">PC ou Mobile?*</label><select id="rec-plat" required class="w-full p-3 bg-slate-50 border rounded-xl"><option value="PC">PC</option><option value="Mobile">Mobile</option></select></div><div><label class="block text-sm font-bold text-pink-400 uppercase mb-2 ml-2">Rank no bawMC*:</label><input type="text" id="rec-rank" required class="w-full p-3 bg-slate-50 border rounded-xl"></div><div><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Aniversário:</label><input type="text" id="rec-aniv" class="w-full p-3 bg-slate-50 border rounded-xl"></div><div class="col-span-full"><label class="block text-sm font-bold text-slate-400 uppercase mb-2 ml-2">Horários:</label><textarea id="rec-horarios" class="w-full p-3 bg-slate-50 border rounded-xl h-16"></textarea></div><button type="submit" class="col-span-full pink-gradient text-white font-bold py-4 rounded-2xl shadow-xl hover:scale-[1.01] transition-all uppercase tracking-widest leading-tight">Enviar Formulário</button></form></div></div>
         
@@ -1402,10 +1442,10 @@
 
             <div id="mgmt-content-permissions-mgmt" class="hidden">
                 <div class="space-y-10">
-                    <!-- Reset de Senha Manual (Luhnny pode digitar qualquer nick aqui) -->
+                    <!-- Reset de Senha Manual -->
                     <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200 max-w-5xl mx-auto">
                         <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase mb-4 tracking-tighter leading-tight"><i data-lucide="key"></i> Resetar Senha Manual</h2>
-                        <p class="text-sm text-slate-500 mb-6">Se um jogador (como o K0ssh1_) não aparecer na lista abaixo, digite o nick dele aqui para resetar a conta.</p>
+                        <p class="text-sm text-slate-500 mb-6">Se um jogador não aparecer na lista abaixo, digite o nick dele aqui para resetar a conta.</p>
                         <div class="flex gap-4">
                             <input type="text" id="manual-reset-nick" placeholder="Nick do Jogador..." class="flex-1 p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
                             <button onclick="window.requestResetAccount(document.getElementById('manual-reset-nick').value.trim())" class="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-pink-600 transition uppercase">Resetar Conta</button>
