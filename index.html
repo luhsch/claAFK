@@ -27,7 +27,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, collection, onSnapshot, updateDoc, addDoc, deleteDoc, setDoc, getDoc, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAhbf0kBYCAWsQAPKYx4TPdud1O_GUjoU4",
@@ -76,6 +76,7 @@
         let allGiveaways = []; 
         let allClanGiveaways = []; 
         let allAuthorizedMembers = [];
+        let allDynamicAllowedMembers = []; // Nova lista dinâmica de autorizados
         let allLogs = [];
         let hiddenStaticMembers = []; 
         let memberDetailsOverrides = {}; 
@@ -111,7 +112,7 @@
 
         // Hierarquia Administrativa Dinâmica
         let dynamicRoles = {
-            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_"], permissions: ["MANAGE_RECRUITMENT", "MANAGE_ALLIANCES", "MANAGE_MEMBERS", "ACCESS_MGMT_TAB"] },
+            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "AnnyGaby"], permissions: ["MANAGE_RECRUITMENT", "MANAGE_ALLIANCES", "MANAGE_MEMBERS", "ACCESS_MGMT_TAB"] },
             event_admins: { members: ["SrLordM", "Bone"], permissions: ["MANAGE_GLOBAL_EVENTS", "MANAGE_GLOBAL_GIVEAWAYS"] },
             mission_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"], permissions: ["MANAGE_MISSIONS"] }
         };
@@ -145,11 +146,12 @@
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "Pardas01", 
             "baiano019", "Raitzz_", "NeverPuzzle", 
-            "felpipoca", "1aswd", "ynSunn", "TheP1nk", "2aswd", "zKingPrime", "PyromaniacVV", "festinha"
+            "felpipoca", "1aswd", "ynSunn", "TheP1nk", "2aswd", "zKingPrime", "PyromaniacVV", "festinha", "AnnyGaby"
         ];
 
         const STATIC_MEMBERS = [
             { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
+            { nick: "AnnyGaby", role: "Co-Líder", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "annygaby.png" },
             { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
             { nick: "Lagartuuuxaaa", role: "Co-Líder", tags: ["spvp", "cpvp"], aniv: "01/07", disp: "22h - 02h", img: "lagartuuuxaaa.png" },
             { nick: "iaruchy", tags: ["cpvp"], aniv: "18/04", disp: "Toda hora", img: "iaruchy.png" },
@@ -324,10 +326,12 @@
                 const staticMatch = ALLOWED_MEMBERS.find(m => m.toLowerCase() === nick.toLowerCase());
                 const recruitMatch = allApplications.find(app => app.nick.toLowerCase() === nick.toLowerCase() && app.status === 'aprovado');
                 const manualMatch = allAuthorizedMembers.find(m => m.nick.toLowerCase() === nick.toLowerCase());
-                if (!staticMatch && !recruitMatch && !manualMatch) {
+                const dynamicMatch = allDynamicAllowedMembers.find(m => m.nick.toLowerCase() === nick.toLowerCase());
+                
+                if (!staticMatch && !recruitMatch && !manualMatch && !dynamicMatch) {
                     return window.notify("Este Nick não está autorizado a registrar-se como membro.", "error", false);
                 }
-                finalName = staticMatch || (recruitMatch ? recruitMatch.nick : (manualMatch ? manualMatch.nick : nick));
+                finalName = staticMatch || (recruitMatch ? recruitMatch.nick : (manualMatch ? manualMatch.nick : (dynamicMatch ? dynamicMatch.nick : nick)));
             }
             try {
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', finalName.toLowerCase());
@@ -394,7 +398,10 @@
                 if (t === sub) { el.classList.remove('hidden'); btn.classList.add('mgmt-subtab-active'); } 
                 else { el.classList.add('hidden'); btn.classList.remove('mgmt-subtab-active'); }
             });
-            if (sub === 'permissions-mgmt') window.renderPermissionsMgmt();
+            if (sub === 'permissions-mgmt') {
+                window.renderPermissionsMgmt();
+                window.renderAllowedListMgmt();
+            }
             lucide.createIcons();
         };
 
@@ -457,6 +464,50 @@
                 `;
             });
             lucide.createIcons();
+        };
+
+        // GESTÃO DA LISTA DE AUTORIZADOS (ALLOW_LIST)
+        window.renderAllowedListMgmt = () => {
+            const isLuhnny = currentUser && currentUser.name === "Luhnny";
+            const container = document.getElementById('allowed-members-list-mgmt');
+            if (!container) return;
+            container.innerHTML = '';
+
+            if (allDynamicAllowedMembers.length === 0) {
+                container.innerHTML = '<p class="text-xs text-slate-400 italic py-4">Nenhum membro autorizado via site ainda.</p>';
+            } else {
+                allDynamicAllowedMembers.forEach(m => {
+                    container.innerHTML += `
+                        <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-600">${m.nick}</span>
+                            ${isLuhnny ? `<button onclick="window.removeAllowedMember('${m.id}')" class="text-red-400 hover:text-red-600 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+                        </div>
+                    `;
+                });
+            }
+            lucide.createIcons();
+        };
+
+        window.addAllowedMember = async () => {
+            if (currentUser?.name !== "Luhnny") return;
+            const input = document.getElementById('new-allowed-nick');
+            const nick = input.value.trim();
+            if (!nick) return;
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'allowed_list'), { nick, addedAt: Date.now() });
+                await saveLog("Lista de Autorizados", `Adicionou ${nick} à lista de autorizados.`);
+                input.value = "";
+                window.notify(`${nick} autorizado!`, "success");
+            } catch (e) { console.error(e); }
+        };
+
+        window.removeAllowedMember = async (id) => {
+            if (currentUser?.name !== "Luhnny") return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'allowed_list', id));
+                await saveLog("Lista de Autorizados", `Removeu um membro da lista.`);
+                window.notify("Autorização removida.", "info");
+            } catch (e) { console.error(e); }
         };
 
         window.toggleRolePermission = async (roleKey, permId) => {
@@ -619,7 +670,7 @@
                         ${canDeleteMembers ? `<button onclick='window.requestDeleteMember(${mData})' class="p-1.5 bg-white text-red-300 hover:text-red-500 rounded-lg shadow-sm border border-slate-100 transition"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
                     </div>`;
                 }
-                const card = `<div class="relative bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">${adminBtns}<div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold ${m.role === 'Líder' ? 'text-pink-600' : 'text-pink-500'} flex items-center gap-2">${m.nick} ${m.role === 'Líder' ? '<i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>' : ''}</h3><img src="${m.img}" onerror="this.src='https://ui-avatars.com/api/?name=${m.nick}&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: ${m.aniv}</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: ${m.disp}</div></div><div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">${tagsHtml}</div></div>`;
+                const card = `<div class="relative bg-white p-6 rounded-3xl card-shadow border border-pink-100 flex flex-col ${m.role === 'Líder' || m.role === 'Co-Líder' ? 'border-2 border-pink-300 scale-105 transform' : ''}">${adminBtns}<div class="flex justify-between items-start mb-4"><h3 class="text-xl font-bold ${m.role === 'Líder' ? 'text-pink-600' : 'text-pink-500'} flex items-center gap-2">${m.nick} ${m.role === 'Líder' ? '<i data-lucide="crown" class="w-5 h-5 text-yellow-400"></i>' : (m.role === 'Co-Líder' ? '<i data-lucide="star" class="w-5 h-5 text-yellow-300"></i>' : '')}</h3><img src="${m.img}" onerror="this.src='https://ui-avatars.com/api/?name=${m.nick}&background=f9a8d4&color=fff'" class="w-16 h-16 rounded-2xl object-cover border-2 border-pink-100"></div><div class="space-y-3 mb-6 flex-grow text-sm"><div class="flex items-center gap-3 font-medium text-slate-600">Aniversário: ${m.aniv}</div><div class="flex items-center gap-3 font-medium text-slate-600">Disponível: ${m.disp}</div></div><div class="flex flex-wrap gap-2 pt-4 border-t border-pink-50">${tagsHtml}</div></div>`;
                 grid.innerHTML += card;
             });
             lucide.createIcons();
@@ -881,7 +932,7 @@
             const ev = list.find(e => e.id === id);
             if (ev && ev.participants) {
                 const next = ev.participants.filter(p => p !== nick);
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'coll', id), { participants: next });
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: next });
                 await saveLog("Remoção de Participante (Evento)", `Removeu ${nick} do evento ${ev.title}`);
                 window.notify(`Removido(a): ${nick}`, "info");
             }
@@ -1134,7 +1185,7 @@
 
             const members = accounts.filter(i => { 
                 const nickLower = (i.name || i.nick || "").toLowerCase(); 
-                return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickLower) || allAuthorizedMembers.some(m => m.nick.toLowerCase() === nickLower); 
+                return i.role === 'member' || ALLOWED_MEMBERS.some(m => m.toLowerCase() === nickLower) || allAuthorizedMembers.some(m => m.nick.toLowerCase() === nickLower) || allDynamicAllowedMembers.some(m => m.nick.toLowerCase() === nickLower); 
             });
             const allies = accounts.filter(i => !members.some(m => (m.name || m.nick || "").toLowerCase() === (i.name || i.nick || "").toLowerCase()));
 
@@ -1325,7 +1376,8 @@
                     const isStatic = ALLOWED_MEMBERS.some(m => m.toLowerCase() === nl) && !hiddenStaticMembers.includes(currentUser.name);
                     const isApproved = allApplications.some(app => app.nick.toLowerCase() === nl && app.status === 'aprovado');
                     const isManual = allAuthorizedMembers.some(m => m.nick.toLowerCase() === nl);
-                    isActuallyMember = isStatic || isApproved || isManual;
+                    const isDynamic = allDynamicAllowedMembers.some(m => m.nick.toLowerCase() === nl);
+                    isActuallyMember = isStatic || isApproved || isManual || isDynamic;
                 }
 
                 if (isActuallyMember) { aClanAreaBtn?.classList.remove('hidden'); } else { aClanAreaBtn?.classList.add('hidden'); }
@@ -1376,6 +1428,14 @@
                 window.renderIdentities(); 
             });
 
+            // NOVO: Listener para a lista dinâmica de autorizados
+            onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'allowed_list'), (s) => {
+                allDynamicAllowedMembers = s.docs.map(d => ({id: d.id, ...d.data()}));
+                window.renderAllowedListMgmt();
+                window.renderMembers();
+                window.renderIdentities();
+            });
+
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'recruitment'), (s) => { if (s.exists()) { isRecruitmentOpen = s.data().isOpen; initialRecruitmentLoad = false; window.updateUI(); } });
             onSnapshot(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'hidden_members'), (s) => { hiddenStaticMembers = s.exists() ? (s.data().nicks || []) : []; window.renderMembers(); });
             onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'events'), (s) => { allEvents = s.docs.map(d => ({id:d.id, ...d.data()})); window.renderEvents(); initialEventLoad = false; });
@@ -1413,7 +1473,7 @@
     </header>
     <nav class="max-w-6xl mx-auto px-6 mb-10 border-b border-pink-200 text-center"><div class="flex gap-2 md:gap-8 justify-center flex-wrap"><button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-sm md:text-lg font-semibold tab-active transition-all">Apresentação</button><button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button><button onclick="window.switchTab('area-cla')" id="btn-area-cla" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Área do Clã</button><button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button><button onclick="window.switchTab('sorteios')" id="btn-sorteios" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Sorteios</button><button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button><button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button><button onclick="window.switchTab('gerenciamento')" id="btn-gerenciamento" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Gerenciamento</button></div></nav>
     <main class="max-w-6xl mx-auto px-6">
-        <div id="tab-apresentacao"><div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed"><div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div><h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2><div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8"><p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p><p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong>, ambos co-líderes.</p><p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p></div><div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left shadow-inner transition-transform hover:scale-[1.01]"><i data-lucide="message-circle" class="text-pink-500 w-10 h-10 flex-shrink-0"></i><p class="text-sm md:text-base font-medium text-slate-700">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p></div></div></div>
+        <div id="tab-apresentacao"><div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed"><div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div><h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2><div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8"><p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p><p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>AnnyGaby</strong>, <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong> como nossos co-líderes.</p><p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p></div><div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left shadow-inner transition-transform hover:scale-[1.01]"><i data-lucide="message-circle" class="text-pink-500 w-10 h-10 flex-shrink-0"></i><p class="text-sm md:text-base font-medium text-slate-700">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p></div></div></div>
         <div id="tab-membros" class="hidden"><div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2><div class="flex items-center gap-4"><div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div></div></div><div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left"></div></div>
         <div id="tab-area-cla" class="hidden"><div class="max-w-4xl mx-auto mb-8 flex justify-center gap-4 flex-wrap"><button onclick="window.switchSubTab('eventos-cla')" id="subbtn-eventos-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Eventos do Clã</button><button onclick="window.switchSubTab('sorteios-cla')" id="subbtn-sorteios-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Sorteios do Clã</button><button onclick="window.switchSubTab('missoes-cla')" id="subbtn-missoes-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Missões do Clã</button></div><div id="subtab-eventos-cla"><div id="clan-suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Internas</h3><div id="clan-suggested-events-list"></div></div><div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-purple-500 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="swords"></i> Eventos Internos</h2><button id="btn-clan-event-panel" onclick="window.openCreateClanEventModal()" class="hidden bg-purple-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-purple-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir</button></div><div id="clan-active-events-list"></div><div id="clan-no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-purple-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-purple-400 mb-2 uppercase">Sem eventos internos</h3><p class="text-slate-500 text-lg">Sugira algo novo!</p></div><div class="mt-16 border-t border-purple-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico Interno</h3><div id="clan-history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div></div></div><div id="subtab-sorteios-cla" class="hidden"><div id="btn-admin-clan-giveaway" class="hidden mb-8 text-center"><button onclick="window.openCreateGiveawayModal(true)" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase flex items-center gap-2 mx-auto"><i data-lucide="gift"></i> Novo Sorteio do Clã</button></div><div id="clan-giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div></div><div id="subtab-missoes-cla" class="hidden"><div id="mission-suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="message-square"></i> Sugestões de Missão (Luhnny)</h3><div id="suggested-missions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div></div><div id="admin-mission-controls" class="hidden mb-8 text-center"><button onclick="window.openModal('modal-create-mission')" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto"><i data-lucide="plus-circle"></i> Nova Missão</button></div><div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div><div class="mt-16 border-t border-purple-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico de Missões</h3><div id="completed-missions-list" class="grid grid-cols-1 gap-3 max-w-4xl mx-auto"></div></div></div></div>
         <div id="tab-eventos" class="hidden"><div id="suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Pendentes</h3><div id="suggested-events-list"></div></div><div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="calendar-heart"></i> Cronograma</h2><button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir Evento</button></div><div id="active-events-list"></div><div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3><p class="text-slate-500 text-lg">Novidades em breve!</p></div><div class="mt-16 border-t border-pink-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico</h3><div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div></div></div>
@@ -1452,6 +1512,19 @@
                         </div>
                     </div>
 
+                    <!-- NOVO: Gerenciamento de Lista de Autorizados (ALLOW_MEMBERS) -->
+                    <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-500 max-w-5xl mx-auto">
+                        <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase mb-4 tracking-tighter leading-tight"><i data-lucide="user-plus"></i> Gerenciar Lista de Autorizados</h2>
+                        <p class="text-sm text-slate-500 mb-6">Membros nesta lista podem criar conta como 'Membro'.</p>
+                        <div class="flex gap-4 mb-8">
+                            <input type="text" id="new-allowed-nick" placeholder="Nick para autorizar..." class="flex-1 p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
+                            <button onclick="window.addAllowedMember()" class="bg-pink-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-pink-700 transition uppercase">Autorizar Nick</button>
+                        </div>
+                        <div id="allowed-members-list-mgmt" class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <!-- Preenchido dinamicamente -->
+                        </div>
+                    </div>
+
                     <!-- CONTROLE DE HIERARQUIA ADMINISTRATIVA DINÂMICO -->
                     <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-100 max-w-6xl mx-auto">
                         <div class="flex items-center justify-between mb-8">
@@ -1467,7 +1540,7 @@
                     <!-- Autorização de Membros -->
                     <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-50 max-w-5xl mx-auto">
                         <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                            <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase"><i data-lucide="user-check"></i> Autorizar Novos Membros</h2>
+                            <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase"><i data-lucide="user-check"></i> Autorizar Novos Membros (Manual Temporário)</h2>
                             <button id="btn-add-member-manual" onclick="window.openModal('modal-add-member-manual')" class="bg-pink-500 text-white px-6 py-2 rounded-xl text-xs font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 uppercase"><i data-lucide="user-plus"></i> Novo Acesso Manual</button>
                         </div>
                         <p class="text-sm text-slate-500 mb-6 italic text-center">Jogadores autorizados aqui conseguem criar conta como 'Membro' usando o código secreto.</p>
