@@ -112,7 +112,7 @@
 
         // Hierarquia Administrativa Dinâmica
         let dynamicRoles = {
-            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "AnnyGaby"], permissions: ["MANAGE_RECRUITMENT", "MANAGE_ALLIANCES", "MANAGE_MEMBERS", "ACCESS_MGMT_TAB"] },
+            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "AnnyGaby", "Radgridr"], permissions: ["MANAGE_RECRUITMENT", "MANAGE_ALLIANCES", "MANAGE_MEMBERS", "ACCESS_MGMT_TAB"] },
             event_admins: { members: ["SrLordM", "Bone"], permissions: ["MANAGE_GLOBAL_EVENTS", "MANAGE_GLOBAL_GIVEAWAYS"] },
             mission_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"], permissions: ["MANAGE_MISSIONS"] }
         };
@@ -146,11 +146,12 @@
         const ALLOWED_MEMBERS = [
             "Luhnny", "K0ssh1_", "Lagartuuuxaaa", "Pardas01", 
             "baiano019", "Raitzz_", "NeverPuzzle", 
-            "felpipoca", "1aswd", "ynSunn", "TheP1nk", "2aswd", "zKingPrime", "PyromaniacVV", "festinha", "AnnyGaby"
+            "felpipoca", "1aswd", "ynSunn", "TheP1nk", "2aswd", "zKingPrime", "PyromaniacVV", "festinha", "AnnyGaby", "Radgridr"
         ];
 
         const STATIC_MEMBERS = [
             { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
+            { nick: "Radgridr", role: "Co-Líder", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "https://ui-avatars.com/api/?name=Radgridr&background=f9a8d4&color=fff" },
             { nick: "AnnyGaby", role: "Co-Líder", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "annygaby.png" },
             { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
             { nick: "Lagartuuuxaaa", role: "Co-Líder", tags: ["spvp", "cpvp"], aniv: "01/07", disp: "22h - 02h", img: "lagartuuuxaaa.png" },
@@ -580,6 +581,7 @@
             const nick = document.getElementById('add-manual-nick').value.trim();
             if (!nick) return window.notify("Digite o Nick.", "error");
             try {
+                // Ao adicionar manualmente, damos permissão automática no Firestore
                 await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'authorized_members', nick.toLowerCase()), { nick, addedAt: Date.now(), addedBy: currentUser.name });
                 await saveLog("Autorização de Membro", `Membro ${nick} autorizado manualmente.`);
                 window.notify(`Membro ${nick} autorizado com sucesso!`, "success");
@@ -738,12 +740,12 @@
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recruitment', memberToDelete.id), { status: 'removed' });
                 }
                 
-                // Resetar a conta do usuário para que ele perca o acesso às abas de membro
+                // Revogação Automática: Deletar a conta do usuário para invalidar acesso como membro
                 const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', memberToDelete.nick.toLowerCase());
                 await deleteDoc(userRef);
                 
-                await saveLog("Remoção de Membro", `Removeu ${memberToDelete.nick} do clã e invalidou seu acesso.`);
-                window.notify(`Membro ${memberToDelete.nick} removido e acesso invalidado.`, "success", false);
+                await saveLog("Remoção de Membro", `Removeu ${memberToDelete.nick} do clã e revogou seu acesso automático.`);
+                window.notify(`Membro ${memberToDelete.nick} removido e acesso revogado.`, "success", false);
             } catch (e) { console.error(e); window.notify("Erro ao remover membro.", "error", false); }
             window.closeModal('modal-confirm-member-delete');
             memberToDelete = null;
@@ -932,7 +934,7 @@
             const ev = list.find(e => e.id === id);
             if (ev && ev.participants) {
                 const next = ev.participants.filter(p => p !== nick);
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', coll, id), { participants: next });
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'coll', id), { participants: next });
                 await saveLog("Remoção de Participante (Evento)", `Removeu ${nick} do evento ${ev.title}`);
                 window.notify(`Removido(a): ${nick}`, "info");
             }
@@ -1338,6 +1340,7 @@
             const canManageMissions = window.hasPermission('MANAGE_MISSIONS');
             const canManageGlobalGiv = window.hasPermission('MANAGE_GLOBAL_GIVEAWAYS');
             const canManageClanGiv = window.hasPermission('MANAGE_CLAN_GIVEAWAYS');
+            const canManageMembers = window.hasPermission('MANAGE_MEMBERS');
             
             const btnGerenciamento = document.getElementById('btn-gerenciamento');
             if (canAccessMgmt) btnGerenciamento?.classList.remove('hidden'); else btnGerenciamento?.classList.add('hidden');
@@ -1357,6 +1360,7 @@
             const recClosedM = document.getElementById('recruitment-closed-message');
             const btnRecNav = document.getElementById('btn-recrutamento');
             const btnAddMemberManual = document.getElementById('btn-add-member-manual');
+            const btnAddMemberTab = document.getElementById('btn-add-member-tab');
             
             if (currentUser) {
                 lBtn?.classList.add('hidden'); uDisp?.classList.remove('hidden'); document.getElementById('logged-name').innerText = currentUser.name;
@@ -1390,10 +1394,16 @@
                 if (isActuallyMember) { aClanEventPanelBtn?.classList.remove('hidden'); } else { aClanEventPanelBtn?.classList.add('hidden'); }
                 if (currentUser) { aGiveawayBtn?.classList.remove('hidden'); } else { aGiveawayBtn?.classList.add('hidden'); }
                 
-                if (window.hasPermission('MANAGE_MEMBERS')) btnAddMemberManual?.classList.remove('hidden'); else btnAddMemberManual?.classList.add('hidden');
+                if (canManageMembers) {
+                    btnAddMemberManual?.classList.remove('hidden'); 
+                    btnAddMemberTab?.classList.remove('hidden');
+                } else {
+                    btnAddMemberManual?.classList.add('hidden'); 
+                    btnAddMemberTab?.classList.add('hidden');
+                }
                 
             } else { 
-                lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden'); btnRecNav?.classList.remove('hidden'); btnAddMemberManual?.classList.add('hidden'); 
+                lBtn?.classList.remove('hidden'); uDisp?.classList.add('hidden'); aRecPanel?.classList.add('hidden'); aAllyBtn?.classList.add('hidden'); aEventBtn?.classList.add('hidden'); recToggle?.classList.add('hidden'); aGiveawayBtn?.classList.add('hidden'); aClanAreaBtn?.classList.add('hidden'); aMissionAdmin?.classList.add('hidden'); aClanGivBtn?.classList.add('hidden'); aClanEventPanelBtn?.classList.add('hidden'); btnRecNav?.classList.remove('hidden'); btnAddMemberManual?.classList.add('hidden'); btnAddMemberTab?.classList.add('hidden');
             }
             
             if (isRecruitmentOpen) { recFormS?.classList.remove('hidden'); recClosedM?.classList.add('hidden'); } else { recFormS?.classList.add('hidden'); recClosedM?.classList.remove('hidden'); }
@@ -1474,7 +1484,18 @@
     <nav class="max-w-6xl mx-auto px-6 mb-10 border-b border-pink-200 text-center"><div class="flex gap-2 md:gap-8 justify-center flex-wrap"><button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-sm md:text-lg font-semibold tab-active transition-all">Apresentação</button><button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button><button onclick="window.switchTab('area-cla')" id="btn-area-cla" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Área do Clã</button><button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button><button onclick="window.switchTab('sorteios')" id="btn-sorteios" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Sorteios</button><button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button><button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button><button onclick="window.switchTab('gerenciamento')" id="btn-gerenciamento" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Gerenciamento</button></div></nav>
     <main class="max-w-6xl mx-auto px-6">
         <div id="tab-apresentacao"><div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed"><div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div><h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2><div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8"><p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p><p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>AnnyGaby</strong>, <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong> como nossos co-líderes.</p><p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p></div><div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left shadow-inner transition-transform hover:scale-[1.01]"><i data-lucide="message-circle" class="text-pink-500 w-10 h-10 flex-shrink-0"></i><p class="text-sm md:text-base font-medium text-slate-700">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p></div></div></div>
-        <div id="tab-membros" class="hidden"><div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2><div class="flex items-center gap-4"><div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div></div></div><div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left"></div></div>
+        <div id="tab-membros" class="hidden">
+            <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
+                <div>
+                    <h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="users"></i> Membros Ativos</h2>
+                    <div id="members-count" class="text-sm text-pink-400/70 italic font-medium">Carregando membros...</div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button id="btn-add-member-tab" onclick="window.openModal('modal-add-member-manual')" class="hidden bg-pink-500 text-white px-6 py-2 rounded-xl text-xs font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 uppercase"><i data-lucide="user-plus"></i> Adicionar Membro</button>
+                </div>
+            </div>
+            <div id="members-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left"></div>
+        </div>
         <div id="tab-area-cla" class="hidden"><div class="max-w-4xl mx-auto mb-8 flex justify-center gap-4 flex-wrap"><button onclick="window.switchSubTab('eventos-cla')" id="subbtn-eventos-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Eventos do Clã</button><button onclick="window.switchSubTab('sorteios-cla')" id="subbtn-sorteios-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Sorteios do Clã</button><button onclick="window.switchSubTab('missoes-cla')" id="subbtn-missoes-cla" class="px-6 py-2 rounded-xl font-bold transition-all uppercase text-xs tracking-widest bg-slate-100 text-slate-500 shadow-sm">Missões do Clã</button></div><div id="subtab-eventos-cla"><div id="clan-suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Internas</h3><div id="clan-suggested-events-list"></div></div><div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-purple-500 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="swords"></i> Eventos Internos</h2><button id="btn-clan-event-panel" onclick="window.openCreateClanEventModal()" class="hidden bg-purple-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-purple-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir</button></div><div id="clan-active-events-list"></div><div id="clan-no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-purple-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-purple-400 mb-2 uppercase">Sem eventos internos</h3><p class="text-slate-500 text-lg">Sugira algo novo!</p></div><div class="mt-16 border-t border-purple-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico Interno</h3><div id="clan-history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div></div></div><div id="subtab-sorteios-cla" class="hidden"><div id="btn-admin-clan-giveaway" class="hidden mb-8 text-center"><button onclick="window.openCreateGiveawayModal(true)" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase flex items-center gap-2 mx-auto"><i data-lucide="gift"></i> Novo Sorteio do Clã</button></div><div id="clan-giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div></div><div id="subtab-missoes-cla" class="hidden"><div id="mission-suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-purple-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight tracking-tighter"><i data-lucide="message-square"></i> Sugestões de Missão (Luhnny)</h3><div id="suggested-missions-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div></div><div id="admin-mission-controls" class="hidden mb-8 text-center"><button onclick="window.openModal('modal-create-mission')" class="bg-purple-500 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-purple-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto"><i data-lucide="plus-circle"></i> Nova Missão</button></div><div id="missions-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div><div class="mt-16 border-t border-purple-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico de Missões</h3><div id="completed-missions-list" class="grid grid-cols-1 gap-3 max-w-4xl mx-auto"></div></div></div></div>
         <div id="tab-eventos" class="hidden"><div id="suggestions-section" class="hidden mb-12"><h3 class="text-xl font-bold text-pink-500 mb-6 flex items-center gap-2 justify-center uppercase leading-tight"><i data-lucide="message-square"></i> Sugestões Pendentes</h3><div id="suggested-events-list"></div></div><div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 text-center md:text-left"><h2 class="text-2xl font-bold text-pink-400 flex items-center gap-2 uppercase tracking-wide"><i data-lucide="calendar-heart"></i> Cronograma</h2><button id="admin-event-panel" onclick="window.openCreateModal()" class="hidden bg-pink-500 text-white px-5 py-2 rounded-2xl text-sm font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 mx-auto md:mx-0 uppercase leading-tight"><i data-lucide="plus-circle"></i> Criar / Sugerir Evento</button></div><div id="active-events-list"></div><div id="no-active-message" class="hidden bg-white rounded-3xl card-shadow border-2 border-dashed border-pink-200 p-8 text-center max-w-4xl mx-auto"><h3 class="text-3xl font-extrabold text-pink-500 mb-2 uppercase">Sem eventos ativos</h3><p class="text-slate-500 text-lg">Novidades em breve!</p></div><div class="mt-16 border-t border-pink-100 pt-10 text-left"><h3 class="text-xl font-bold text-slate-400 mb-6 flex items-center gap-2 uppercase tracking-wider leading-tight"><i data-lucide="history"></i> Histórico</h3><div id="history-events-list" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div></div></div>
         <div id="tab-sorteios" class="hidden"><div id="btn-admin-giveaway" class="hidden mb-8 text-center"><button onclick="window.openCreateGiveawayModal()" class="bg-pink-50 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:bg-pink-600 transition uppercase tracking-tighter flex items-center gap-2 mx-auto"><i data-lucide="gift"></i> Novo Sorteio</button></div><div id="giveaways-list" class="grid grid-cols-1 gap-6 max-w-3xl mx-auto"></div></div>
@@ -1502,29 +1523,6 @@
 
             <div id="mgmt-content-permissions-mgmt" class="hidden">
                 <div class="space-y-10">
-                    <!-- Reset de Senha Manual -->
-                    <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-200 max-w-5xl mx-auto">
-                        <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase mb-4 tracking-tighter leading-tight"><i data-lucide="key"></i> Resetar Senha Manual</h2>
-                        <p class="text-sm text-slate-500 mb-6">Se um jogador não aparecer na lista abaixo, digite o nick dele aqui para resetar a conta.</p>
-                        <div class="flex gap-4">
-                            <input type="text" id="manual-reset-nick" placeholder="Nick do Jogador..." class="flex-1 p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                            <button onclick="window.requestResetAccount(document.getElementById('manual-reset-nick').value.trim())" class="bg-pink-500 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-pink-600 transition uppercase">Resetar Conta</button>
-                        </div>
-                    </div>
-
-                    <!-- NOVO: Gerenciamento de Lista de Autorizados (ALLOW_MEMBERS) -->
-                    <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-500 max-w-5xl mx-auto">
-                        <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase mb-4 tracking-tighter leading-tight"><i data-lucide="user-plus"></i> Gerenciar Lista de Autorizados</h2>
-                        <p class="text-sm text-slate-500 mb-6">Membros nesta lista podem criar conta como 'Membro'.</p>
-                        <div class="flex gap-4 mb-8">
-                            <input type="text" id="new-allowed-nick" placeholder="Nick para autorizar..." class="flex-1 p-3 bg-slate-50 border rounded-xl outline-none focus:border-pink-300">
-                            <button onclick="window.addAllowedMember()" class="bg-pink-600 text-white px-8 py-3 rounded-xl font-bold shadow-lg hover:bg-pink-700 transition uppercase">Autorizar Nick</button>
-                        </div>
-                        <div id="allowed-members-list-mgmt" class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            <!-- Preenchido dinamicamente -->
-                        </div>
-                    </div>
-
                     <!-- CONTROLE DE HIERARQUIA ADMINISTRATIVA DINÂMICO -->
                     <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-100 max-w-6xl mx-auto">
                         <div class="flex items-center justify-between mb-8">
@@ -1535,15 +1533,6 @@
                         <div id="dynamic-permissions-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <!-- Preenchido dinamicamente via JS -->
                         </div>
-                    </div>
-
-                    <!-- Autorização de Membros -->
-                    <div class="bg-white p-8 rounded-3xl card-shadow border-2 border-pink-50 max-w-5xl mx-auto">
-                        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                            <h2 class="text-2xl font-bold text-pink-600 flex items-center gap-2 uppercase"><i data-lucide="user-check"></i> Autorizar Novos Membros (Manual Temporário)</h2>
-                            <button id="btn-add-member-manual" onclick="window.openModal('modal-add-member-manual')" class="bg-pink-500 text-white px-6 py-2 rounded-xl text-xs font-bold shadow-lg hover:bg-pink-600 transition flex items-center gap-2 uppercase"><i data-lucide="user-plus"></i> Novo Acesso Manual</button>
-                        </div>
-                        <p class="text-sm text-slate-500 mb-6 italic text-center">Jogadores autorizados aqui conseguem criar conta como 'Membro' usando o código secreto.</p>
                     </div>
 
                     <!-- Gestão de Identidades -->
