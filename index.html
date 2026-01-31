@@ -112,9 +112,9 @@
 
         // Hierarquia Administrativa Dinâmica
         let dynamicRoles = {
-            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "AnnyGaby", "Radgridr"], permissions: ["MANAGE_RECRUITMENT", "MANAGE_ALLIANCES", "MANAGE_MEMBERS", "ACCESS_MGMT_TAB"] },
+            super_admins: { members: ["Luhnny", "Lagartuuuxaaa", "AnnyGaby", "Radgridr"], permissions: ["MANAGE_RECRUITMENT", "MANAGE_ALLIANCES", "MANAGE_MEMBERS", "ACCESS_MGMT_TAB"] },
             event_admins: { members: ["SrLordM", "Bone"], permissions: ["MANAGE_GLOBAL_EVENTS", "MANAGE_GLOBAL_GIVEAWAYS"] },
-            mission_admins: { members: ["Luhnny", "Lagartuuuxaaa", "K0ssh1_", "2aswd"], permissions: ["MANAGE_MISSIONS"] }
+            mission_admins: { members: ["Luhnny", "Lagartuuuxaaa", "2aswd"], permissions: ["MANAGE_MISSIONS"] }
         };
 
         // FUNÇÃO CENTRAL DE PERMISSÃO - AGORA RESPEITANDO INDIVIDUAIS E CARGOS
@@ -144,24 +144,22 @@
         const INVITE_CODE_ALLY = "123alianca";
 
         const ALLOWED_MEMBERS = [
-            "Luhnny", "K0ssh1_", "Pardas01", 
-            "baiano019", "NeverPuzzle", 
-            "felpipoca", "ynSunn", "TheP1nk", "2aswd", "festinha", "AnnyGaby", "Radgridr"
+            "Luhnny", "Pardas01", 
+            "baiano019", 
+            "felpipoca", "ynSunn", "TheP1nk", "zKaaiky7", "festinha", "AnnyGaby", "Radgridr"
         ];
 
         const STATIC_MEMBERS = [
             { nick: "Luhnny", role: "Líder", tags: ["builder"], aniv: "17/10", disp: "Manhã e Noite", img: "luhnny.png" },
-            { nick: "Radgridr", role: "Co-Líder", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "https://ui-avatars.com/api/?name=Radgridr&background=f9a8d4&color=fff" },
-            { nick: "AnnyGaby", role: "Co-Líder", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "annygaby.png" },
-            { nick: "K0ssh1_", role: "Co-Líder", tags: ["cpvp"], aniv: "27/04", disp: "13:30 - 01:30", img: "k0ssh1.png" },
+            { nick: "AnnyGaby", role: "Sub-Líder", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "annygaby.png" },
+            { nick: "Radgridr", role: "Gerente", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "https://ui-avatars.com/api/?name=Radgridr&background=f9a8d4&color=fff" },
+            { nick: "lkkgerme", role: "Gerente", tags: ["cpvp"], aniv: "27/07", disp: "Variável", img: "lkkgerme.png" },
+            { nick: "baiano019", role: "Gerente", tags: ["builder"], aniv: "14/05", disp: "Noite", img: "baiano019.png" },
+            { nick: "zKaaiky7", role: "Gerente", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
             { nick: "Pardas01", tags: ["cpvp", "builder", "farm"], aniv: "16/06", disp: "Tarde e Noite", img: "pardas01.png" },
-            { nick: "baiano019", tags: ["builder"], aniv: "14/05", disp: "Noite", img: "baiano019.png" },
-            { nick: "Invisivel", tags: ["spvp", "cpvp", "builder", "farm"], aniv: "28/07", disp: "Noite", img: "invisivel.png" },
-            { nick: "NeverPuzzle", tags: ["spvp", "cpvp", "farm"], aniv: "11/08", disp: "Tarde", img: "neverpuzzle.png" },
             { nick: "felpipoca", tags: ["spvp", "farm"], aniv: "21/01", disp: "Dia e Madrugada", img: "felpipoca.png" },
             { nick: "ynSunn", tags: ["spvp", "builder", "farm"], aniv: "23/08", disp: "Tarde e Noite", img: "ynsunn.png" },
             { nick: "TheP1nk", tags: ["pvp", "cpvp", "builder"], aniv: "10/07", disp: "Tarde e Noite", img: "thep1nk.png" },
-            { nick: "2aswd", tags: ["spvp", "builder", "farm"], aniv: "20/05", disp: "Toda hora", img: "2aswd.png" },
             { nick: "festinha", tags: ["membro"], aniv: "N/I", disp: "N/I", img: "festinha.png" }
         ];
 
@@ -1473,7 +1471,7 @@
     </header>
     <nav class="max-w-6xl mx-auto px-6 mb-10 border-b border-pink-200 text-center"><div class="flex gap-2 md:gap-8 justify-center flex-wrap"><button onclick="window.switchTab('apresentacao')" id="btn-apresentacao" class="pb-3 text-sm md:text-lg font-semibold tab-active transition-all">Apresentação</button><button onclick="window.switchTab('membros')" id="btn-membros" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Membros</button><button onclick="window.switchTab('area-cla')" id="btn-area-cla" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Área do Clã</button><button onclick="window.switchTab('eventos')" id="btn-eventos" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Eventos</button><button onclick="window.switchTab('sorteios')" id="btn-sorteios" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Sorteios</button><button onclick="window.switchTab('aliancas')" id="btn-aliancas" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Alianças</button><button onclick="window.switchTab('recrutamento')" id="btn-recrutamento" class="pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Recrutamento</button><button onclick="window.switchTab('gerenciamento')" id="btn-gerenciamento" class="hidden pb-3 text-sm md:text-lg font-semibold text-pink-300 transition-all">Gerenciamento</button></div></nav>
     <main class="max-w-6xl mx-auto px-6">
-        <div id="tab-apresentacao"><div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed"><div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div><h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2><div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8"><p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p><p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>AnnyGaby</strong>, <strong>Lagartuuuxaaa</strong> e <strong>K0ssh1_</strong> como nossos co-líderes.</p><p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p></div><div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left shadow-inner transition-transform hover:scale-[1.01]"><i data-lucide="message-circle" class="text-pink-500 w-10 h-10 flex-shrink-0"></i><p class="text-sm md:text-base font-medium text-slate-700">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p></div></div></div>
+        <div id="tab-apresentacao"><div class="bg-white p-8 md:p-12 rounded-3xl card-shadow border border-pink-100 max-w-4xl mx-auto text-center leading-relaxed"><div class="flex justify-center mb-8"><div class="p-2 bg-pink-50 rounded-full border-2 border-pink-100 shadow-inner"><img src="icone.png" onerror="this.src='https://ui-avatars.com/api/?name=AFK&background=f9a8d4&color=fff&size=200'" class="w-32 h-32 md:w-48 md:h-48 rounded-full object-cover"></div></div><h2 class="text-3xl font-bold text-pink-500 mb-6 uppercase"><i data-lucide="sparkles" class="inline w-8 h-8"></i> Breve apresentação</h2><div class="space-y-6 text-slate-600 text-lg text-left leading-relaxed mb-8"><p>O <strong>Clã AFK</strong> nasceu com o propósito de reunir amigos, focado originalmente em <strong>Build</strong> no servidor <strong>bawmc.net</strong>. Porém nossa comunidade evoluiu e hoje em dia nosso clã se encontra tanto em PvP quanto em Build!</p><p>O gerenciamento do clã é exercido pela <strong>Luhnny</strong> como nossa líder, juntamente com o apoio de <strong>AnnyGaby</strong>, <strong>Radgridr</strong>, <strong>zKaaiky7</strong>, <strong>lkkgerme</strong> e <strong>baiano019</strong> como nossos co-líderes.</p><p>O objetivo do clã é, e sempre será a diversão. Não toleramos qualquer desrespeito e toxicidade!</p></div><div class="bg-pink-50 p-6 rounded-2xl border-l-4 border-pink-400 flex items-center gap-4 text-left shadow-inner transition-transform hover:scale-[1.01]"><i data-lucide="message-circle" class="text-pink-500 w-10 h-10 flex-shrink-0"></i><p class="text-sm md:text-base font-medium text-slate-700">Qualquer dúvida, entrar em contato com <strong>@luhsch</strong> no Discord!</p></div></div></div>
         <div id="tab-membros" class="hidden">
             <div class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 text-center md:text-left">
                 <div>
